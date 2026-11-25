@@ -19,7 +19,7 @@ function doPost(e) {
     const d = JSON.parse(e.postData.contents);
     const email = String(d.email || '').trim().toLowerCase();
     if (!/^[^\s@'"\\]+@[^\s@'"\\]+\.[^\s@'"\\]+$/.test(email)) throw new Error('Email tidak valid.');
-    if (d.action === 'register') out = register(String(d.name || '').trim().slice(0, 60), email, String(d.consent || '').slice(0, 20000));
+    if (d.action === 'register') out = register(String(d.name || '').trim().slice(0, 60), email, d);
     else if (d.action === 'login') out = login(email);
     else if (d.action === 'startUpload') out = startUpload(email, d);
     else if (d.action === 'finishUpload') out = finishUpload(email, d);
@@ -39,25 +39,61 @@ function userFolder(email) {
 
 function songFolderName(i) { return String(i + 1).padStart(2, '0') + ' - ' + SONGS[i]; }
 
-function register(name, email, consent) {
+function register(name, email, d) {
   if (!name) throw new Error('Nama wajib diisi.');
-  if (!consent) throw new Error('Persetujuan wajib dicentang.');
+  if (d.agreed !== true) throw new Error('Persetujuan wajib dicentang.');
+  // The page shows its own copy of the statement; refuse if it isn't the version saved below.
+  if (d.consentVersion !== CONSENT_VERSION) throw new Error('Halaman sudah diperbarui. Muat ulang halaman, lalu coba lagi.');
   const lock = LockService.getScriptLock(); lock.waitLock(10000); // avoid duplicate folders on double-submit
   try {
     const existing = userFolder(email);
     const f = existing || root().createFolder(name.replace(/[\/\\]/g, '') + '_' + email);
-    saveConsent(f, name, email, consent);
+    saveConsent(f, name, email);
     return existing ? login(email) : { name, subs: {} };
   } finally { lock.releaseLock(); }
 }
 
 // One record per time the user agrees; timestamp comes from Google's server, not the user's device.
-function saveConsent(folder, name, email, consent) {
+// The statement is the server's own copy, so editing the page can't change what gets recorded.
+function saveConsent(folder, name, email) {
   const now = Utilities.formatDate(new Date(), 'Asia/Jakarta', "yyyy-MM-dd HH:mm:ss 'WIB'");
+  const statement = CONSENT_TEXT.replace('{NAMA}', name).replace('{EMAIL}', email);
   folder.createFile('PERSETUJUAN ' + now.replace(/:/g, '.') + '.txt',
     'Disetujui secara elektronik pada: ' + now + '\nNama Lengkap: ' + name + '\nAlamat Surel: ' + email +
-    '\n\n----- Teks yang ditampilkan dan disetujui -----\n\n' + consent, MimeType.PLAIN_TEXT);
+    '\nVersi pernyataan: ' + CONSENT_VERSION +
+    '\n\n----- Teks yang ditampilkan dan disetujui -----\n\n' + statement, MimeType.PLAIN_TEXT);
 }
+
+// Change CONSENT_VERSION here AND data-version on #consentText in index.html whenever the wording changes.
+const CONSENT_VERSION = '2026-11-25';
+const CONSENT_TEXT = `SURAT PERNYATAAN DAN PERSETUJUAN PENGGUNAAN MATERI VIDEO
+(USER-GENERATED CONTENT CONSENT & RELEASE FORM)
+
+Surat Pernyataan dan Persetujuan Penggunaan Materi Video (“Pernyataan”) ini dibuat dan disetujui secara elektronik melalui situs web resmi oleh pihak yang mengisi data di bawah ini:
+
+Nama Lengkap : {NAMA}
+Alamat Surel : {EMAIL}
+Untuk selanjutnya disebut sebagai “Kontributor”.
+
+Dengan ini Kontributor menyatakan secara sadar, tanpa paksaan dari pihak mana pun, serta mengikatkan diri pada ketentuan-ketentuan sebagai berikut:
+
+1. PENYERAHAN MATERI VIDEO DAN PENGGUNAANNYA
+
+a. Kontributor secara sukarela menyerahkan rekaman audio-visual (“Materi Video”) untuk proyek perayaan 7 (tujuh) tahun album “Menari Dengan Bayangan” milik musisi “Hindia” yang dikelola oleh PT Sepuluh Dua Empat beserta mitra produksinya (“Penyelenggara”), serta memberikan izin penuh, non-eksklusif, dapat dialihkan, dan tidak dapat ditarik kembali kepada Penyelenggara untuk menyunting, memotong, mengubah format, dan menayangkan Materi Video tersebut baik sebagian maupun seluruhnya pada video musik utama di YouTube, seluruh karya turunan media sosial (termasuk namun tidak terbatas pada Instagram Reels, TikTok, Threads, YouTube Shorts, dan materi promosi berbayar), maupun pertunjukan langsung di seluruh dunia tanpa batasan waktu.
+
+b. Kontributor menjamin bahwa Materi Video adalah karya asli milik sendiri yang bebas dari pelanggaran hak cipta pihak lain, maupun muatan melanggar hukum, serta menyetujui bahwa seluruh hak cipta atas hasil akhir video musik dan karya turunannya sepenuhnya menjadi hak milik tunggal Penyelenggara dan/atau musisi Hindia sesuai Undang-Undang Nomor 28 Tahun 2014 tentang Hak Cipta (“UU 28/2014”).
+
+c. Kontributor memberikan persetujuan tertulis atas penggunaan wajah, suara, nama, dan penampilannya untuk kepentingan komersial maupun non-komersial, serta menjamin telah memperoleh izin penuh dari setiap individu lain yang wajah maupun suaranya ikut terekam di dalam Materi Video.
+
+d. Kontributor memahami bahwa partisipasi ini bersifat sukarela tanpa kewajiban Penyelenggara untuk menayangkan setiap kiriman video, dan penggunaan Materi Video pada video musik maupun karya turunan media sosial tidak menimbulkan hak atas royalti, honorarium, bagi hasil monetisasi, atau kompensasi finansial apa pun bagi Kontributor maupun pihak ketiga di dalamnya pada saat ini maupun di masa mendatang.
+
+e. Kontributor memberikan persetujuan eksplisit kepada Penyelenggara untuk mengumpulkan, menyimpan, dan memproses data pribadi Kontributor (termasuk identitas diri dan data biometrik) guna keperluan verifikasi hak dan publikasi karya sesuai dengan Undang-Undang Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi.
+
+f. Kontributor melepaskan PT Sepuluh Dua Empat, musisi Hindia, dan seluruh mitra produksi dari segala tuntutan hukum di kemudian hari, serta bersedia bertanggung jawab penuh dan mengganti kerugian Penyelenggara atas segala klaim pihak ketiga atau biaya hukum yang timbul akibat pelanggaran jaminan orisinalitas, hak cipta, hak potret pihak ketiga, maupun ketidakbenaran pernyataan ini.
+
+g. Kontributor menjamin kebenaran seluruh data yang diisi dan menyatakan telah berusia minimal 18 (delapan belas) tahun atau cakap secara hukum.
+
+[X] Saya telah membaca, memahami dan menyetujui seluruh syarat dan ketentuan di atas secara sadar dan tanpa paksaan dari pihak manapun untuk dapat dipergunakan sebagaimana mestinya`;
 
 function login(email) {
   const f = userFolder(email);

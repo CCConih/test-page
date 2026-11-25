@@ -135,9 +135,10 @@ $('regForm').onsubmit = async (e) => {
   e.preventDefault();
   const f = e.target, name = f.name.value.trim(), email = f.email.value.trim().toLowerCase();
   try {
-    // Exactly what the user saw and ticked, saved by the server as their consent record.
-    const consent = $('consentText').innerText + '\n\n[X] ' + $('agreeLabel').innerText.trim();
-    const res = await call('register', { name, email, consent });
+    // Server saves its own copy of the statement; the version proves this page showed that same copy.
+    const consentVersion = $('consentText').dataset.version;
+    const consent = $('consentText').innerText + '\n\n[X] ' + $('agreeLabel').innerText.trim(); // shortcut: only for the pre-redeploy backend, remove once Code.gs is redeployed
+    const res = await call('register', { name, email, agreed: f.agree.checked, consentVersion, consent });
     login({ ...res, email });
     $('consent').close(); show('grid');
   } catch (err) { $('regErr').textContent = err.message; }
