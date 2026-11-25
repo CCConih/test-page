@@ -84,13 +84,22 @@ function putFile(url, file, onProgress) {
 }
 
 // ---------- Views ----------
+// Smooth screen changes: browsers with View Transitions fade between the old and new screen (CSS: ::view-transition-*);
+// older browsers, and people who ask for less motion, just switch instantly.
+function transition(change) {
+  if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return change();
+  document.startViewTransition(change);
+}
+
 function show(view) {
-  for (const v of ['home', 'grid', 'song', 'done']) $('v-' + v).hidden = v !== view;
-  document.body.dataset.view = view; // home shows the big logo, other screens a small one
-  if (view === 'grid') renderGrid();
-  if (view === 'song') renderSong();
-  if (view === 'done') $('doneCount').textContent = Object.keys(user.subs).length;
-  window.scrollTo(0, 0);
+  transition(() => {
+    for (const v of ['home', 'grid', 'song', 'done']) $('v-' + v).hidden = v !== view;
+    document.body.dataset.view = view; // home shows the big logo, other screens a small one
+    if (view === 'grid') renderGrid();
+    if (view === 'song') renderSong();
+    if (view === 'done') $('doneCount').textContent = Object.keys(user.subs).length;
+    window.scrollTo(0, 0);
+  });
 }
 
 const thumb = (i) => `url('assets/thumbs/${String(i + 1).padStart(2, '0')}.jpg')`; // song artwork, same order as SONGS
@@ -199,8 +208,8 @@ $('fileInput').onchange = async (e) => {
   finally { $('uploadBtn').disabled = false; bar.style.width = 0; }
 };
 
-$('prevBtn').onclick = () => { current--; renderSong(); };
-$('nextBtn').onclick = () => { current++; renderSong(); };
+$('prevBtn').onclick = () => transition(() => { current--; renderSong(); });
+$('nextBtn').onclick = () => transition(() => { current++; renderSong(); });
 $('toGridBtn').onclick = () => show('grid');
 $('finishBtn').onclick = () => show('done');
 $('backBtn').onclick = () => show('grid');

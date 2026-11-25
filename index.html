@@ -120,7 +120,24 @@
   .err { color: #FFAA8C; font: 700 13px var(--type); min-height: 1em; margin: 0; }
   .mock { background: var(--paper); color: var(--ink); font: 11px var(--type); padding: 6px; margin: -28px -22px 16px; }
   [hidden] { display: none !important; }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  /* Screen changes (app.js transition()): only the content column moves; the photo background stays still.
+     The old screen fades up and out quickly, the new one rises in a touch slower, so it reads as one smooth step. */
+  main { view-transition-name: page; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+  ::view-transition-group(page) { animation-duration: .32s; }
+  ::view-transition-old(page) { animation: page-out .16s ease-in both; }
+  ::view-transition-new(page) { animation: page-in .32s cubic-bezier(.2, .7, .2, 1) .06s both; }
+  @keyframes page-out { to { opacity: 0; transform: translateY(-6px); } }
+  @keyframes page-in { from { opacity: 0; transform: translateY(12px); } }
+  /* Sign-up pop-up: rises in, backdrop fades in */
+  dialog[open] { animation: pop-in .28s cubic-bezier(.2, .7, .2, 1); }
+  dialog[open]::backdrop { animation: fade-in .28s ease; }
+  @keyframes pop-in { from { opacity: 0; transform: translateY(14px) scale(.98); } }
+  @keyframes fade-in { from { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+    dialog[open], dialog[open]::backdrop { animation: none; }
+  }
 </style>
 </head>
 <body data-view="home">
