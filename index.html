@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hindia — 7 Tahun Menari dengan Bayangan</title>
+<style>
+  /* Wireframe styling only — real design comes later. */
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #f2f2f2; color: #111; }
+  main { max-width: 480px; margin: 0 auto; min-height: 100vh; background: #fff; padding: 24px 20px; display: flex; flex-direction: column; text-align: center; }
+  header img { height: 48px; }
+  h1 { font-size: 15px; margin: 12px 0 20px; letter-spacing: .02em; }
+  .media { background: #ecc94b; border-radius: 10px; padding: 28px 16px; margin-bottom: 20px; font-size: 14px; }
+  .btn { display: inline-block; background: #3b5bdb; color: #fff; border: 0; border-radius: 8px; padding: 14px 24px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.small { padding: 6px 4px; font-size: 10px; width: 100%; border-radius: 4px; }
+  .btn.done { background: #63e6be; color: #111; }
+  .link { background: none; border: 0; color: #3b5bdb; text-decoration: underline; cursor: pointer; font-size: 14px; }
+  footer { margin-top: auto; padding-top: 24px; font-size: 12px; color: #777; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
+  .tile { display: flex; flex-direction: column; gap: 4px; }
+  .tile .box { aspect-ratio: 1; background: #ddd; border-radius: 6px; display: flex; align-items: center; justify-content: center; padding: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; cursor: pointer; border: 0; }
+  .tile.has .box { background: #69db7c; }
+  .pager { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-top: 16px; }
+  .progress { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin: 12px 0; }
+  .progress div { height: 100%; background: #3b5bdb; width: 0; transition: width .2s; }
+  dialog { border: 0; border-radius: 12px; padding: 24px; max-width: 400px; width: 90%; }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  form { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+  input[type=text], input[type=email] { padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; }
+  label.check { display: flex; gap: 8px; font-size: 13px; align-items: flex-start; }
+  .consent { max-height: 140px; overflow: auto; background: #f7f7f7; padding: 12px; border-radius: 8px; font-size: 12px; }
+  .alt { border-top: 1px solid #eee; margin-top: 16px; padding-top: 12px; font-size: 14px; text-align: center; }
+  .err { color: #c92a2a; font-size: 13px; min-height: 1em; }
+  .mock { background: #fff3bf; font-size: 11px; padding: 4px; margin: -24px -20px 16px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="mock" id="mockBanner" hidden>PREVIEW MODE — data tersimpan di browser ini saja, file tidak diunggah.</div>
+  <header><img src="LOGO/small.png" alt="Hindia"></header>
+
+  <!-- 1. Homescreen -->
+  <section id="v-home">
+    <h1>PERAYAAN 7 TAHUN<br>ALBUM MENARI DENGAN BAYANGAN</h1>
+    <div class="media">(MOV) slideshow footage prompt video<br><br>
+      Terima kasih telah mendengarkan album MDB. Setelah 7 tahun rilis, apa makna yang kalian temukan dari album debut Hindia di tahun ini?</div>
+    <p>Tunjukkan momen menari dengan bayanganmu sendiri dan bagikan bersama kami</p>
+    <p><button class="btn" id="startBtn">Rayakan di Sini</button></p>
+  </section>
+
+  <!-- 2C. Song grid -->
+  <section id="v-grid" hidden>
+    <h1>Pilih lagu favoritmu dan unggah videomu</h1>
+    <p style="font-size:13px;margin-top:-12px">Halo, <b id="userName"></b> · <span id="count"></span>/12 terkirim · <button class="link" id="logoutBtn">Keluar</button></p>
+    <div class="grid" id="grid"></div>
+    <p><button class="btn" id="finishBtn">Finish Upload</button></p>
+  </section>
+
+  <!-- 2C. Single song upload -->
+  <section id="v-song" hidden>
+    <h1>PERAYAAN 7 TAHUN<br>ALBUM MENARI DENGAN BAYANGAN</h1>
+    <div class="media">(MOV) slideshow example video prompt</div>
+    <p><b id="songTitle"></b><br><span id="songPrompt" style="font-size:14px;white-space:pre-line"></span></p>
+    <p id="songHint" style="font-size:12px;color:#777"></p>
+    <p id="songStatus" style="font-size:13px;color:#2b8a3e"></p>
+    <input type="file" id="fileInput" accept="video/*" hidden>
+    <p><button class="btn" id="uploadBtn"></button></p>
+    <div class="progress" id="progress" hidden><div></div></div>
+    <p class="err" id="uploadErr"></p>
+    <div class="pager">
+      <button class="link" id="prevBtn">‹ Back</button>
+      <span id="pageNum"></span>
+      <button class="link" id="nextBtn">Next ›</button>
+    </div>
+    <p><button class="link" id="toGridBtn">Lihat semua lagu</button></p>
+  </section>
+
+  <!-- Thank you -->
+  <section id="v-done" hidden>
+    <h1>TERIMA KASIH!</h1>
+    <p>Kamu sudah mengirim <b id="doneCount"></b> dari 12 video. Kamu bisa kembali kapan saja untuk melanjutkan atau mengganti kirimanmu — cukup masuk dengan email yang sama.</p>
+    <p><button class="btn" id="backBtn">Kembali ke daftar lagu</button></p>
+  </section>
+
+  <footer>Footer website as usual</footer>
+</main>
+
+<!-- 1A. Consent pop up (first visit) -->
+<dialog id="consent">
+  <form id="regForm">
+    <h3 style="margin:0">Unggah Videomu</h3>
+    <div class="consent">
+      Dengan mengirimkan video/foto, saya memberikan izin kepada Hindia dan tim untuk menyimpan, mengedit, dan menayangkan kiriman saya untuk keperluan perayaan 7 tahun album Menari dengan Bayangan. (Teks persetujuan final dari tim legal.)
+    </div>
+    <input type="text" name="name" placeholder="Nama" required maxlength="60" autocomplete="name">
+    <input type="email" name="email" placeholder="Email" required autocomplete="email">
+    <label class="check"><input type="checkbox" name="agree" required> Dengan ini saya menyetujui syarat &amp; ketentuan di atas.</label>
+    <p class="err" id="regErr"></p>
+    <button class="btn" type="submit">Unggah Videomu</button>
+  </form>
+  <div class="alt">Sudah pernah daftar? <button class="link" id="showLogin">Login</button></div>
+  <form id="loginForm" hidden style="margin-top:12px">
+    <input type="email" name="email" placeholder="Email yang sudah terdaftar" required autocomplete="email">
+    <p class="err" id="loginErr"></p>
+    <button class="btn" type="submit">Login dengan Email</button>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
