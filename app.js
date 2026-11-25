@@ -50,6 +50,7 @@ function mockCall(action, { name, email, song, fileName }) {
   if (action === 'register') { db[email] ??= { name, subs: {} }; save(); return { name: db[email].name, subs: db[email].subs }; }
   if (action === 'login') { if (!db[email]) throw new Error('Email belum terdaftar.'); return { name: db[email].name, subs: db[email].subs }; }
   if (action === 'startUpload') { db[email].subs[song] = fileName; save(); return { uploadUrl: null }; }
+  if (action === 'finishUpload') return {};
 }
 
 function putFile(url, file, onProgress) {
@@ -152,6 +153,7 @@ $('fileInput').onchange = async (e) => {
   try {
     const { uploadUrl } = await call('startUpload', { email: user.email, song, fileName: file.name, mimeType: file.type, size: file.size });
     await putFile(uploadUrl, file, (p) => (bar.style.width = p + '%'));
+    await call('finishUpload', { email: user.email, song }).catch(() => {}); // cleanup only; the new file is already saved
     user.subs[song] = file.name;
     if (current === song) renderSong();
   } catch (err) { $('uploadErr').textContent = err.message; }

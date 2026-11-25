@@ -22,6 +22,7 @@ function doPost(e) {
     if (d.action === 'register') out = register(String(d.name || '').trim().slice(0, 60), email);
     else if (d.action === 'login') out = login(email);
     else if (d.action === 'startUpload') out = startUpload(email, d);
+    else if (d.action === 'finishUpload') out = finishUpload(email, d);
     else throw new Error('Unknown action');
   } catch (err) {
     out = { error: err.message };
@@ -74,7 +75,7 @@ function startUpload(email, d) {
   if (!f) throw new Error('Email belum terdaftar.');
   const it = f.getFoldersByName(songFolderName(i));
   const sf = it.hasNext() ? it.next() : f.createFolder(songFolderName(i));
-  // "Ganti video" keeps old files (newest counts) so a failed re-upload never loses the previous one.
+  // Old file is removed only in finishUpload, after the new one has fully arrived, so a failed re-upload never loses it.
   const res = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
     method: 'post',
     contentType: 'application/json',
@@ -87,6 +88,23 @@ function startUpload(email, d) {
     payload: JSON.stringify({ name: String(d.fileName || 'upload').slice(0, 200), parents: [sf.getId()] }),
   });
   return { uploadUrl: res.getHeaders().Location };
+}
+
+// Called after the browser finishes uploading: keeps only the newest file in the song folder.
+// Older ones go to the Drive owner's Trash (recoverable for 30 days), not deleted outright.
+function finishUpload(email, d) {
+  const i = Number(d.song);
+  if (!(i >= 0 && i < SONGS.length)) throw new Error('Lagu tidak valid.');
+  const f = userFolder(email);
+  if (!f) throw new Error('Email belum terdaftar.');
+  const it = f.getFoldersByName(songFolderName(i));
+  if (!it.hasNext()) return {};
+  const files = [];
+  const all = it.next().getFiles();
+  while (all.hasNext()) files.push(all.next());
+  files.sort((a, b) => b.getDateCreated() - a.getDateCreated());
+  files.slice(1).forEach((x) => x.setTrashed(true));
+  return { kept: files[0] ? files[0].getName() : null };
 }
 
 const ROOT_NAME = 'MDB 7 Tahun - UGC Submissions';
