@@ -112,16 +112,27 @@ g. Kontributor menjamin kebenaran seluruh data yang diisi dan menyatakan telah b
 function login(email) {
   const f = userFolder(email);
   if (!f) throw new Error('Email belum terdaftar.');
-  const subs = {};
-  SONGS.forEach((_, i) => {
-    const sf = f.getFoldersByName(songFolderName(i));
-    if (!sf.hasNext()) return;
-    let newest = null;
-    const files = sf.next().getFiles();
-    while (files.hasNext()) { const x = files.next(); if (!newest || x.getDateCreated() > newest.getDateCreated()) newest = x; }
-    if (newest) subs[i] = newest.getName();
-  });
+  // Two Drive API calls (song folders, then all their files) instead of ~24 DriveApp calls, one pair per song.
+  const songOf = {}; // song folder id -> song index
+  driveList(`'${f.getId()}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`, 'files(id,name)')
+    .forEach((x) => { const i = SONGS.findIndex((_, k) => songFolderName(k) === x.name); if (i >= 0) songOf[x.id] = i; });
+  const subs = {}, newest = {};
+  const ids = Object.keys(songOf);
+  if (ids.length) {
+    driveList(`(${ids.map((id) => `'${id}' in parents`).join(' or ')}) and trashed = false`, 'files(name,parents,createdTime)')
+      .forEach((x) => {
+        const i = songOf[x.parents.find((p) => p in songOf)];
+        if (newest[i] == null || x.createdTime > newest[i]) { newest[i] = x.createdTime; subs[i] = x.name; } // ISO times compare as text
+      });
+  }
   return { name: f.getName().slice(0, -(email.length + 1)), subs };
+}
+
+// shortcut: reads one page (up to 1000 results); a user has at most 12 song folders with ~1 file each, so it never needs more.
+function driveList(q, fields) {
+  const url = 'https://www.googleapis.com/drive/v3/files?pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true' +
+    '&fields=' + encodeURIComponent(fields) + '&q=' + encodeURIComponent(q);
+  return JSON.parse(UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }).getContentText()).files || [];
 }
 
 function startUpload(email, d) {
