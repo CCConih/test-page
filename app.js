@@ -51,11 +51,12 @@ async function call(action, data) {
   return json;
 }
 
-// Disables a form's submit button while a request runs: shows progress and stops double sign-ups.
-function busy(form, on) {
-  const b = form.querySelector('[type=submit]');
-  if (on) { b.dataset.label = b.textContent; b.textContent = 'Memproses…'; } else b.textContent = b.dataset.label;
+// Puts a button in its loading state (spinner + text) while a request runs; also stops double sign-ups.
+function busy(b, on, label = 'Memproses…') {
+  if (on) { b.dataset.label = b.textContent; b.textContent = label; } else b.textContent = b.dataset.label;
   b.disabled = on;
+  b.classList.toggle('loading', on);
+  b.setAttribute('aria-busy', on);
 }
 
 function mockCall(action, { name, email, song, fileName }) {
@@ -148,7 +149,7 @@ $('showLogin').onclick = () => { $('loginForm').hidden = false; $('loginForm').e
 $('regForm').onsubmit = async (e) => {
   e.preventDefault();
   const f = e.target, name = f.name.value.trim(), email = f.email.value.trim().toLowerCase();
-  $('regErr').textContent = ''; busy(f, true);
+  $('regErr').textContent = ''; busy(f.querySelector('[type=submit]'), true);
   try {
     // Server saves its own copy of the statement; the version proves this page showed that same copy.
     const consentVersion = $('consentText').dataset.version;
@@ -156,19 +157,19 @@ $('regForm').onsubmit = async (e) => {
     login({ ...res, email });
     $('consent').close(); show('grid');
   } catch (err) { $('regErr').textContent = err.message; }
-  finally { busy(f, false); }
+  finally { busy(f.querySelector('[type=submit]'), false); }
 };
 
 $('loginForm').onsubmit = async (e) => {
   e.preventDefault();
   const email = e.target.email.value.trim().toLowerCase();
-  $('loginErr').textContent = ''; busy(e.target, true);
+  $('loginErr').textContent = ''; busy(e.target.querySelector('[type=submit]'), true);
   try {
     const res = await call('login', { email });
     login({ ...res, email });
     $('consent').close(); show('grid');
   } catch (err) { $('loginErr').textContent = err.message; }
-  finally { busy(e.target, false); }
+  finally { busy(e.target.querySelector('[type=submit]'), false); }
 };
 
 $('uploadBtn').onclick = () => $('fileInput').click();
@@ -205,6 +206,8 @@ $('logoutBtn').onclick = () => { localStorage.removeItem('mdb_session'); user = 
   $('mockBanner').hidden = !!API_URL;
   const saved = JSON.parse(localStorage.getItem('mdb_session') || 'null');
   if (!saved) return;
+  busy($('startBtn'), true, 'Memuat…'); // otherwise a tap here mid-sign-in opens the sign-up form
   try { login({ ...(await call('login', { email: saved.email })), email: saved.email }); }
   catch (err) { if (/belum terdaftar/.test(err.message)) localStorage.removeItem('mdb_session'); } // keep the session on a connection blip
+  finally { busy($('startBtn'), false); }
 })();

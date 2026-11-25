@@ -47,6 +47,12 @@
   .btn:hover { background: #A32B0D; }
   .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--rust-dark); }
   .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+  /* Loading: spinning ring before the label; full colour so it reads as "working", not "off" */
+  .btn.loading:disabled { opacity: 1; cursor: progress; }
+  .btn.loading::before { content: ''; display: inline-block; width: .8em; height: .8em; margin-right: .55em; vertical-align: -.08em;
+    border: .14em solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .btn.loading::before { animation-duration: 2s; } }
   .btn.wide { width: 100%; }
   .btn.small { width: 100%; padding: 7px 2px; font: 700 10px/1 var(--type); letter-spacing: .02em; box-shadow: none; background: transparent; color: var(--rust); border: 1.5px solid var(--rust); }
   .btn.small.done { color: var(--muted); border-color: rgba(122, 90, 72, .45); }
