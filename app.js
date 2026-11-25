@@ -93,6 +93,8 @@ function show(view) {
   window.scrollTo(0, 0);
 }
 
+const thumb = (i) => `url('assets/thumbs/${String(i + 1).padStart(2, '0')}.jpg')`; // song artwork, same order as SONGS
+
 function renderGrid() {
   $('userName').textContent = user.name;
   $('count').textContent = Object.keys(user.subs).length;
@@ -103,6 +105,7 @@ function renderGrid() {
     tile.className = 'tile' + (has ? ' has' : '');
     tile.innerHTML = `<button class="box"><span class="no"></span><span class="t"></span></button><button class="btn small ${has ? 'done' : ''}">${has ? 'Ganti?' : 'Unggah'}</button>`;
     tile.querySelector('.no').textContent = String(i + 1).padStart(2, '0');
+    tile.querySelector('.box').style.backgroundImage = thumb(i);
     tile.querySelector('.t').textContent = title.replace(/\s*\(ft\..*\)$/i, ''); // "ft." names don't fit a tile; full title is on the song page
     tile.querySelector('.box').setAttribute('aria-label', `${i + 1}. ${title}${has ? ' (terkirim)' : ''}`);
     tile.querySelectorAll('button').forEach((b) => (b.onclick = () => { current = i; show('song'); }));
@@ -114,6 +117,7 @@ function renderSong() {
   const [title, prompt] = SONGS[current];
   const n = String(current + 1).padStart(2, '0');
   $('songNo').textContent = n;
+  $('songMedia').style.backgroundImage = `linear-gradient(rgba(10, 8, 7, .1), rgba(10, 8, 7, .5)), ${thumb(current)}`;
   $('songTitle').textContent = title;
   $('songPrompt').textContent = prompt;
   $('pageNum').textContent = `${n}/12`;
