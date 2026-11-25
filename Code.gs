@@ -59,16 +59,19 @@ function register(name, email, d) {
   if (d.agreed !== true) throw new Error('Persetujuan wajib dicentang.');
   // The page shows its own copy of the statement; refuse if it isn't the version saved below.
   if (d.consentVersion !== CONSENT_VERSION) throw new Error('Halaman sudah diperbarui. Muat ulang halaman, lalu coba lagi.');
-  // The slow Drive search runs outside the lock. The lock (one script-wide lock shared by every visitor) only covers
-  // "re-check the cache, else create", so two requests for one new email can't both create a folder.
   let existing = userFolder(email), f = existing;
   if (!f) {
-    const lock = LockService.getScriptLock();
-    if (!lock.tryLock(15000)) throw new Error('Server sedang sibuk. Coba lagi sebentar lagi.');
-    try {
-      existing = f = cachedFolder(email); // created by a parallel request while we waited
-      if (!f) f = rememberFolder(email, root().createFolder(name.replace(/[\/\\]/g, '') + '_' + email));
-    } finally { lock.releaseLock(); }
+    // No site-wide lock: in a 100-user test it let only ~1 new user per second through. Instead a per-email note says
+    // "being created"; a second request for the same email waits for that folder rather than making its own.
+    // shortcut: the note isn't atomic, so two requests for one email within the same few ms can still make two folders
+    // (only possible from two devices at once); switch to a real per-email lock if that ever shows up in Drive.
+    const cache = CacheService.getScriptCache(), key = 'creating:' + email;
+    for (let t = 0; t < 10 && cache.get(key) && !(f = cachedFolder(email)); t++) Utilities.sleep(500);
+    existing = f;
+    if (!f) {
+      cache.put(key, '1', 30);
+      f = rememberFolder(email, root().createFolder(name.replace(/[\/\\]/g, '') + '_' + email));
+    }
   }
   saveConsent(f, name, email);
   if (existing) return login(email);

@@ -16,7 +16,7 @@ function folder(id, name) {
 let byId;
 
 function load(driveFolders, driveFiles, { knownUser = true } = {}) {
-  const fetched = [], counts = { rootCreates: 0, locks: 0 };
+  const fetched = [], counts = { rootCreates: 0, sleeps: 0 };
   byId = {};
   const user = folder('U', 'Budi Santoso_budi@x.com'); byId.U = user;
   const root = folder('R', 'root'); byId.R = root;
@@ -25,10 +25,10 @@ function load(driveFolders, driveFiles, { knownUser = true } = {}) {
   const cache = new Map(knownUser ? [['folder:budi@x.com', 'U']] : []);
   const ctx = {
     CacheService: { getScriptCache: () => ({ get: (k) => cache.get(k) ?? null, put: (k, v) => cache.set(k, v), remove: (k) => cache.delete(k) }) },
-    LockService: { getScriptLock: () => ({ tryLock: () => { counts.locks++; const h = counts.whileWaiting; counts.whileWaiting = null; if (h) h(); return true; }, releaseLock() {} }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => 'R' }) },
     DriveApp: { getFolderById: (id) => byId[id] },
-    Utilities: { formatDate: () => '2026-11-25 10:00:00 WIB' },
+    // sleep = time passing while another request works; a test can make that other request finish here
+    Utilities: { formatDate: () => '2026-11-25 10:00:00 WIB', sleep: () => { counts.sleeps++; const h = counts.whileWaiting; counts.whileWaiting = null; if (h) h(); } },
     MimeType: { PLAIN_TEXT: 'text/plain' },
     ScriptApp: { getOAuthToken: () => 'token' },
     UrlFetchApp: { fetch: (url) => {
@@ -80,31 +80,49 @@ const SIGNUP = { agreed: true, consentVersion: '2026-11-25' };
   assert.ok(!cache.has('subs:budi@x.com'), 'finishUpload clears the list cached mid-upload');
 }
 
-// Sign-up of a new email, twice (double tap / retry) while Drive search still lags: one folder, lock taken once.
+// Sign-up of a new email, twice (double tap / retry) while Drive search still lags: one folder.
 {
   const { ctx, root, counts, cache } = load([], [], { knownUser: false });
   const a = JSON.parse(JSON.stringify(ctx.register('Sari', 'sari@x.com', SIGNUP)));
   const b = JSON.parse(JSON.stringify(ctx.register('Sari', 'sari@x.com', SIGNUP)));
   assert.strictEqual(counts.rootCreates, 1, 'only one user folder created');
-  assert.strictEqual(counts.locks, 1, 'second sign-up found the folder without the lock');
+  assert.strictEqual(counts.sleeps, 0, 'second sign-up found the folder at once, no waiting');
   assert.strictEqual(a.name, 'Sari'); assert.strictEqual(b.name, 'Sari');
   assert.strictEqual(root.kids[0].files.length, 2, 'a consent record per sign-up');
   assert.ok(cache.has('folder:sari@x.com'));
 }
 
-// Two sign-ups for one new email at the same moment: the second finishes while the first waits for the lock.
+// Two sign-ups for one new email at the same moment: one is mid-create (note set) when the other arrives.
 {
-  const { ctx, counts } = load([], [], { knownUser: false });
-  counts.whileWaiting = () => ctx.register('Sari', 'sari@x.com', SIGNUP);
+  const { ctx, counts, cache } = load([], [], { knownUser: false });
+  cache.set('creating:sari@x.com', '1'); // the other request is creating the folder right now...
+  counts.whileWaiting = () => ctx.rememberFolder('sari@x.com', ctx.root().createFolder('Sari_sari@x.com')); // ...and finishes while we wait
   ctx.register('Sari', 'sari@x.com', SIGNUP);
   assert.strictEqual(counts.rootCreates, 1, 'the waiting request reuses the folder the other one created');
+  assert.ok(counts.sleeps >= 1);
 }
 
-// Sign-up of an already-known email never takes the lock.
+// While a new user's folder is being created, the "being created" note is visible to other requests.
+{
+  const { ctx, root, cache } = load([], [], { knownUser: false });
+  let noteSeen = false; const create = root.createFolder;
+  root.createFolder = (n) => { noteSeen = cache.has('creating:sari@x.com'); return create(n); };
+  ctx.register('Sari', 'sari@x.com', SIGNUP);
+  assert.ok(noteSeen, 'note set before the folder is created');
+}
+
+// Different new people never wait for each other.
+{
+  const { ctx, counts } = load([], [], { knownUser: false });
+  ctx.register('Sari', 'sari@x.com', SIGNUP); ctx.register('Dewi', 'dewi@x.com', SIGNUP);
+  assert.strictEqual(counts.rootCreates, 2); assert.strictEqual(counts.sleeps, 0);
+}
+
+// Sign-up of an already-known email never waits or creates.
 {
   const { ctx, counts } = load([], []);
   ctx.register('Budi Santoso', 'budi@x.com', SIGNUP);
-  assert.strictEqual(counts.locks, 0);
+  assert.strictEqual(counts.sleeps, 0);
   assert.strictEqual(counts.rootCreates, 0);
 }
 

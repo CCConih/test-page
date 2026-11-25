@@ -39,14 +39,15 @@ async function call(action, data) {
   if (!API_URL) return mockCall(action, data);
   // text/plain avoids a CORS preflight, which Apps Script can't answer.
   const send = () => fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action, ...data }) }).then((r) => r.json());
-  let json;
-  // Apps Script sometimes answers with a Google error page (seen as a network/CORS failure); one quiet retry covers it.
+  // Apps Script answers with a Google error page (seen as a network/CORS failure) when more than 30 requests run at once.
+  // Up to 2 quiet retries, waiting ~1.5 s then ~3 s plus a random extra, so a crowd's retries don't all land together.
   // Safe for every action: register finds the existing folder (worst case an extra consent record), the rest are repeatable.
-  try { json = await send(); }
-  catch {
-    await new Promise((ok) => setTimeout(ok, 1500));
-    try { json = await send(); } catch { throw new Error('Koneksi bermasalah. Periksa internetmu, lalu coba lagi.'); }
+  let json;
+  for (const wait of [0, 1500, 3000]) {
+    if (wait) await new Promise((ok) => setTimeout(ok, wait + Math.random() * wait * 0.5));
+    try { json = await send(); break; } catch { /* try again */ }
   }
+  if (!json) throw new Error('Koneksi bermasalah. Periksa internetmu, lalu coba lagi.');
   if (json.error) throw new Error(json.error);
   return json;
 }

@@ -16,7 +16,8 @@ document.getElementById('app').onload = async (e) => {
   const cases = [
     ['works first time',         [{ name: 'A' }],              (r) => r.ok?.name === 'A' && r.calls === 1],
     ['one failure, then retry',  ['net', { name: 'A' }],       (r) => r.ok?.name === 'A' && r.calls === 2],
-    ['two failures',             ['net', 'net'],               (r) => /Koneksi bermasalah/.test(r.err) && r.calls === 2],
+    ['two failures, then retry', ['net', 'net', { name: 'A' }], (r) => r.ok?.name === 'A' && r.calls === 3],
+    ['three failures',           ['net', 'net', 'net'],        (r) => /Koneksi bermasalah/.test(r.err) && r.calls === 3],
     ['server error, no retry',   [{ error: 'Email belum terdaftar.' }], (r) => r.err === 'Email belum terdaftar.' && r.calls === 1],
   ];
   let failed = 0; const lines = [];
