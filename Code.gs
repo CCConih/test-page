@@ -19,7 +19,7 @@ function doPost(e) {
     const d = JSON.parse(e.postData.contents);
     const email = String(d.email || '').trim().toLowerCase();
     if (!/^[^\s@'"\\]+@[^\s@'"\\]+\.[^\s@'"\\]+$/.test(email)) throw new Error('Email tidak valid.');
-    if (d.action === 'register') out = register(String(d.name || '').trim().slice(0, 60), email);
+    if (d.action === 'register') out = register(String(d.name || '').trim().slice(0, 60), email, String(d.consent || '').slice(0, 20000));
     else if (d.action === 'login') out = login(email);
     else if (d.action === 'startUpload') out = startUpload(email, d);
     else if (d.action === 'finishUpload') out = finishUpload(email, d);
@@ -39,15 +39,24 @@ function userFolder(email) {
 
 function songFolderName(i) { return String(i + 1).padStart(2, '0') + ' - ' + SONGS[i]; }
 
-function register(name, email) {
+function register(name, email, consent) {
   if (!name) throw new Error('Nama wajib diisi.');
+  if (!consent) throw new Error('Persetujuan wajib dicentang.');
   const lock = LockService.getScriptLock(); lock.waitLock(10000); // avoid duplicate folders on double-submit
   try {
-    const f = userFolder(email);
-    if (f) return login(email);
-    root().createFolder(name.replace(/[\/\\]/g, '') + '_' + email);
-    return { name, subs: {} };
+    const existing = userFolder(email);
+    const f = existing || root().createFolder(name.replace(/[\/\\]/g, '') + '_' + email);
+    saveConsent(f, name, email, consent);
+    return existing ? login(email) : { name, subs: {} };
   } finally { lock.releaseLock(); }
+}
+
+// One record per time the user agrees; timestamp comes from Google's server, not the user's device.
+function saveConsent(folder, name, email, consent) {
+  const now = Utilities.formatDate(new Date(), 'Asia/Jakarta', "yyyy-MM-dd HH:mm:ss 'WIB'");
+  folder.createFile('PERSETUJUAN ' + now.replace(/:/g, '.') + '.txt',
+    'Disetujui secara elektronik pada: ' + now + '\nNama Lengkap: ' + name + '\nAlamat Surel: ' + email +
+    '\n\n----- Teks yang ditampilkan dan disetujui -----\n\n' + consent, MimeType.PLAIN_TEXT);
 }
 
 function login(email) {

@@ -131,7 +131,9 @@ $('regForm').onsubmit = async (e) => {
   e.preventDefault();
   const f = e.target, name = f.name.value.trim(), email = f.email.value.trim().toLowerCase();
   try {
-    const res = await call('register', { name, email });
+    // Exactly what the user saw and ticked, saved by the server as their consent record.
+    const consent = $('consentText').innerText + '\n\n[X] ' + $('agreeLabel').innerText.trim();
+    const res = await call('register', { name, email, consent });
     login({ ...res, email });
     $('consent').close(); show('grid');
   } catch (err) { $('regErr').textContent = err.message; }
