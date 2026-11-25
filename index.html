@@ -30,7 +30,10 @@
   form { display: flex; flex-direction: column; gap: 12px; text-align: left; }
   input[type=text], input[type=email] { padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; }
   label.check { display: flex; gap: 8px; font-size: 13px; align-items: flex-start; }
-  .consent { max-height: 140px; overflow: auto; background: #f7f7f7; padding: 12px; border-radius: 8px; font-size: 12px; }
+  .consent { max-height: 40vh; overflow: auto; background: #f7f7f7; padding: 12px; border-radius: 8px; font-size: 12px; line-height: 1.5; }
+  .consent ol { padding-left: 18px; }
+  .consent li { margin-bottom: 6px; }
+  label.check:has(input:disabled) { opacity: .5; }
   .alt { border-top: 1px solid #eee; margin-top: 16px; padding-top: 12px; font-size: 14px; text-align: center; }
   .err { color: #c92a2a; font-size: 13px; min-height: 1em; }
   .mock { background: #fff3bf; font-size: 11px; padding: 4px; margin: -24px -20px 16px; }
@@ -92,12 +95,26 @@
 <dialog id="consent">
   <form id="regForm">
     <h3 style="margin:0">Unggah Videomu</h3>
-    <div class="consent">
-      Dengan mengirimkan video/foto, saya memberikan izin kepada Hindia dan tim untuk menyimpan, mengedit, dan menayangkan kiriman saya untuk keperluan perayaan 7 tahun album Menari dengan Bayangan. (Teks persetujuan final dari tim legal.)
+    <input type="text" name="name" placeholder="Nama Lengkap" required maxlength="60" autocomplete="name">
+    <input type="email" name="email" placeholder="Alamat Surel" required autocomplete="email">
+    <div class="consent" id="consentText">
+      <p style="text-align:center"><b>SURAT PERNYATAAN DAN PERSETUJUAN PENGGUNAAN MATERI VIDEO</b><br><i>(USER-GENERATED CONTENT CONSENT &amp; RELEASE FORM)</i></p>
+      <p>Surat Pernyataan dan Persetujuan Penggunaan Materi Video (“Pernyataan”) ini dibuat dan disetujui secara elektronik melalui situs web resmi oleh pihak yang mengisi data di bawah ini:</p>
+      <p>Nama Lengkap : <b id="cName">—</b><br>Alamat Surel : <b id="cEmail">—</b><br>Untuk selanjutnya disebut sebagai “Kontributor”.</p>
+      <p>Dengan ini Kontributor menyatakan secara sadar, tanpa paksaan dari pihak mana pun, serta mengikatkan diri pada ketentuan-ketentuan sebagai berikut:</p>
+      <p><b>1. PENYERAHAN MATERI VIDEO DAN PENGGUNGANNYA</b></p>
+      <ol>
+        <li>Kontributor secara sukarela menyerahkan rekaman audio-visual (“Materi Video”) untuk proyek perayaan 7 (tujuh) tahun album “Menari Dengan Bayangan” milik musisi “Hindia” yang dikelola oleh PT Sepuluh Dua Empat beserta mitra produksinya (“Penyelenggara”), serta memberikan izin penuh, non-eksklusif, dapat dialihkan, dan tidak dapat ditarik kembali kepada Penyelenggara untuk menyunting, memotong, mengubah format, dan menayangkan Materi Video tersebut baik sebagian maupun seluruhnya pada video musik utama di YouTube, seluruh karya turunan media sosial (termasuk namun tidak terbatas pada Instagram Reels, TikTok, Threads, YouTube Shorts, dan materi promosi berbayar), maupun pertunjukan langsung di seluruh dunia tanpa batasan waktu.</li>
+        <li>Kontributor menjamin bahwa Materi Video adalah karya asli milik sendiri yang bebas dari pelanggaran hak cipta pihak lain, maupun muatan melanggar hukum, serta menyetujui bahwa seluruh hak cipta atas hasil akhir video musik dan karya turunannya sepenuhnya menjadi hak milik tunggal Penyelenggara dan/atau musisi Hindia sesuai Undang-Undang Nomor 28 Tahun 2014 tentang Hak Cipta (“UU 28/2014”).</li>
+        <li>Kontributor memberikan persetujuan tertulis atas penggunaan wajah, suara, nama, dan penampilannya untuk kepentingan komersial maupun non-komersial, serta menjamin telah memperoleh izin penuh dari setiap individu lain yang wajah maupun suaranya ikut terekam di dalam Materi Video.</li>
+        <li>Kontributor memahami bahwa partisipasi ini bersifat sukarela tanpa kewajiban Penyelenggara untuk menayangkan setiap kiriman video, dan penggunaan Materi Video pada video musik maupun karya turunan media sosial tidak menimbulkan hak atas royalti, honorarium, bagi hasil monetisasi, atau kompensasi finansial apa pun bagi Kontributor maupun pihak ketiga di dalamnya pada saat ini maupun di masa mendatang.</li>
+        <li>Kontributor memberikan persetujuan eksplisit kepada Penyelenggara untuk mengumpulkan, menyimpan, dan memproses data pribadi Kontributor (termasuk identitas diri dan data biometrik) guna keperluan verifikasi hak dan publikasi karya sesuai dengan Undang-Undang Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi.</li>
+        <li>Kontributor melepaskan PT Sepuluh Dua Empat, musisi Hindia, dan seluruh mitra produksi dari segala tuntutan hukum di kemudian hari, serta bersedia bertanggung jawab penuh dan mengganti kerugian Penyelenggara atas segala klaim pihak ketiga atau biaya hukum yang timbul akibat pelanggaran jaminan orisinalitas, hak cipta, hak potret pihak ketiga, maupun ketidakbenaran pernyataan ini.</li>
+        <li>Kontributor menjamin kebenaran seluruh data yang diisi dan menyatakan telah berusia minimal 18 (delapan belas) tahun atau cakap secara hukum.</li>
+      </ol>
     </div>
-    <input type="text" name="name" placeholder="Nama" required maxlength="60" autocomplete="name">
-    <input type="email" name="email" placeholder="Email" required autocomplete="email">
-    <label class="check"><input type="checkbox" name="agree" required> Dengan ini saya menyetujui syarat &amp; ketentuan di atas.</label>
+    <p id="scrollHint" style="font-size:12px;color:#777;margin:-4px 0 0">Gulir sampai bawah untuk menyetujui ↓</p>
+    <label class="check"><input type="checkbox" name="agree" required disabled> Saya telah membaca, memahami dan menyetujui seluruh syarat dan ketentuan di atas secara sadar dan tanpa paksaan dari pihak manapun untuk dapat dipergunakan sebagaimana mestinya</label>
     <p class="err" id="regErr"></p>
     <button class="btn" type="submit">Unggah Videomu</button>
   </form>

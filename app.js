@@ -116,6 +116,15 @@ function login(data) {
 
 // ---------- Events ----------
 $('startBtn').onclick = () => (user ? show('grid') : $('consent').showModal());
+// Consent: tick box unlocks only once the statement is scrolled to the end; name/email echo into the statement.
+function checkConsentRead() {
+  const c = $('consentText');
+  if (c.scrollTop + c.clientHeight >= c.scrollHeight - 8) { $('regForm').agree.disabled = false; $('scrollHint').hidden = true; }
+}
+$('consentText').onscroll = checkConsentRead;
+$('consent').addEventListener('toggle', checkConsentRead); // in case it all fits without scrolling
+$('regForm').name.oninput = (e) => ($('cName').textContent = e.target.value.trim() || '—');
+$('regForm').email.oninput = (e) => ($('cEmail').textContent = e.target.value.trim() || '—');
 $('showLogin').onclick = () => { $('loginForm').hidden = false; $('loginForm').email.focus(); };
 
 $('regForm').onsubmit = async (e) => {
