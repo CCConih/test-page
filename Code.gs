@@ -1,7 +1,8 @@
 /**
  * Google Apps Script backend. Deploy: Extensions > Apps Script in any Google account,
- * paste this file, run authorize() once (creates the Drive folder), Deploy > New deployment > Web app,
- * "Execute as: Me", "Who has access: Anyone". Copy the URL into API_URL in app.js.
+ * paste this file, set GOOGLE_CLIENT_ID below, run authorize() once (creates the Drive folder),
+ * Deploy > New deployment > Web app, "Execute as: Me", "Who has access: Anyone". Copy the URL into API_URL in app.js.
+ * Visitors sign in with Google (auth); every other action is tied to that signed-in account by a session id.
  *
  * Drive layout:  ROOT / <Name>_<email> / <NN - Song> / <uploaded files>
  * The video goes browser -> Drive directly (resumable upload), so Apps Script's 50 MB limit doesn't apply.
@@ -12,22 +13,53 @@ const SONGS = ['Evakuasi', 'Besok Mungkin Kita Sampai', 'Jam Makan Siang', 'Dehi
   'Belum Tidur', 'Apapun yang Terjadi', 'Membasuh', 'Rumah ke Rumah', 'Mata Air', 'Evaluasi'];
 const IMAGE_SONG = 3; // Dehidrasi takes a screenshot; every other song is video only
 const MAX_BYTES =500 * 1024 * 1024;
+// OAuth "Web application" client ID from Google Cloud Console; must be the same value as GOOGLE_CLIENT_ID in app.js.
+const GOOGLE_CLIENT_ID = 'PASTE_CLIENT_ID.apps.googleusercontent.com';
+const SESSION_SECONDS = 21600; // 6 h, the script cache maximum; after that people tap "Masuk dengan Google" again
 
 function doPost(e) {
   let out;
   try {
     const d = JSON.parse(e.postData.contents);
-    const email = String(d.email || '').trim().toLowerCase();
-    if (!/^[^\s@'"\\]+@[^\s@'"\\]+\.[^\s@'"\\]+$/.test(email)) throw new Error('Email tidak valid.');
-    if (d.action === 'register') out = register(String(d.name || '').trim().slice(0, 60), email, d);
-    else if (d.action === 'login') out = login(email);
-    else if (d.action === 'startUpload') out = startUpload(email, d);
-    else if (d.action === 'finishUpload') out = finishUpload(email, d);
-    else throw new Error('Unknown action');
+    if (d.action === 'auth') out = auth(String(d.idToken || ''));
+    else {
+      // Every other action acts only for the Google account that signed in: the email comes from the session,
+      // never from the request, so nobody can read or upload as someone else by typing their email.
+      const email = sessionEmail(d.session);
+      if (d.action === 'register') out = register(String(d.name || '').trim().slice(0, 60), email, d);
+      else if (d.action === 'login') out = login(email);
+      else if (d.action === 'startUpload') out = startUpload(email, d);
+      else if (d.action === 'finishUpload') out = finishUpload(email, d);
+      else if (d.action === 'logout') { CacheService.getScriptCache().remove('sess:' + d.session); out = {}; }
+      else throw new Error('Unknown action');
+    }
   } catch (err) {
     out = { error: err.message };
   }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Google sign-in: the page sends the ID token Google gave it. Google's tokeninfo endpoint checks the signature and expiry;
+// we check it was issued for THIS site (aud) by Google (iss) and that Google has confirmed the email address.
+function auth(idToken) {
+  const fail = 'Login Google gagal. Coba lagi.';
+  if (!idToken) throw new Error(fail);
+  const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken), { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error(fail);
+  const t = JSON.parse(res.getContentText());
+  if (t.aud !== GOOGLE_CLIENT_ID || !/^(https:\/\/)?accounts\.google\.com$/.test(t.iss) || String(t.email_verified) !== 'true') throw new Error(fail);
+  const email = String(t.email || '').trim().toLowerCase();
+  if (!/^[^\s@'"\\]+@[^\s@'"\\]+\.[^\s@'"\\]+$/.test(email)) throw new Error(fail); // also keeps quotes out of Drive queries
+  const session = Utilities.getUuid(); // random, unguessable
+  CacheService.getScriptCache().put('sess:' + session, email, SESSION_SECONDS);
+  // Known user: signed straight in. New user: the page asks for their name and consent, then calls register.
+  return userFolder(email) ? { session, email, registered: true, ...login(email) } : { session, email, registered: false, googleName: String(t.name || '') };
+}
+
+function sessionEmail(session) {
+  const email = /^[0-9a-f-]{36}$/.test(String(session)) && CacheService.getScriptCache().get('sess:' + session);
+  if (!email) throw new Error('Sesi berakhir. Silakan masuk lagi.');
+  return email;
 }
 
 // Drive search lags a few seconds behind new folders, so a just-created folder is remembered here first.

@@ -116,9 +116,13 @@
   .consent p:first-child { font-family: var(--display); color: var(--rust-light); font-size: 13px; }
   .consent ol { padding-left: 20px; }
   .consent li { margin-bottom: 8px; }
-  .alt { border-top: 1.5px dashed var(--line); margin-top: 18px; padding-top: 12px; font-size: 14px; text-align: center; }
+  .gbtn { display: flex; justify-content: center; min-height: 44px; }
+  #regForm { margin-top: 10px; }
+  .inapp { background: #120E0C; border: 1px solid var(--line); border-radius: 12px; padding: 14px; font: 13px/1.55 var(--type); display: flex; flex-direction: column; gap: 10px; }
+  .inapp p, .inapp ol { margin: 0; } .inapp ol { padding-left: 20px; }
+  .inapp .btn { text-align: center; text-decoration: none; font-size: 16px; padding: 13px 20px; }
+  .inapp #copyLink { background: transparent; border: 1.5px solid rgba(244, 236, 221, .55); box-shadow: none; }
   .err { color: #FFAA8C; font: 700 13px var(--type); min-height: 1em; margin: 0; }
-  .mock { background: var(--paper); color: var(--ink); font: 11px var(--type); padding: 6px; margin: -28px -22px 16px; }
   [hidden] { display: none !important; }
   /* Screen changes (app.js transition()): only the content column moves; the photo background stays still.
      The old screen fades up and out quickly, the new one rises in a touch slower, so it reads as one smooth step. */
@@ -143,7 +147,6 @@
 <body data-view="home">
 <div class="bg" aria-hidden="true"></div>
 <main>
-  <div class="mock" id="mockBanner" hidden>PREVIEW MODE — data tersimpan di browser ini saja, file tidak diunggah.</div>
   <header><img src="assets/logo-cream.png" alt="Hindia — 7th Menari Dengan Bayangan"></header>
 
   <!-- 1. Homescreen -->
@@ -198,10 +201,25 @@
 
 <!-- 1A. Consent pop up (first visit) -->
 <dialog id="consent">
-  <form id="regForm">
-    <h3>Unggah Videomu</h3>
+  <h3>Unggah Videomu</h3>
+  <!-- Step 1: Google sign-in. Known users go straight in; new users continue to step 2. -->
+  <div id="googleStep">
+    <p class="note" style="text-align:center;margin:6px 0 16px">Masuk dengan akun Google untuk mulai.<br>Sudah pernah daftar? Pakai akun Google yang sama.</p>
+    <div id="gBtn" class="gbtn"></div>
+    <p class="note" id="authBusy" style="text-align:center" hidden>Memproses…</p>
+    <!-- Instagram/TikTok/etc. in-app browsers: Google refuses to sign in there -->
+    <div id="inApp" class="inapp" hidden>
+      <p><b>Buka di browser dulu, ya.</b><br>Login Google tidak bisa dibuka dari dalam aplikasi ini (Instagram, TikTok, dan lainnya).</p>
+      <ol><li>Ketuk menu <b>⋯</b> atau <b>⋮</b> di pojok layar.</li><li>Pilih <b>Buka di browser</b> / <b>Open in browser</b>.</li></ol>
+      <a class="btn wide" id="openChrome" hidden>Buka di Chrome</a>
+      <button class="btn wide" type="button" id="copyLink">Salin link</button>
+    </div>
+    <p class="err" id="authErr" style="text-align:center"></p>
+  </div>
+  <!-- Step 2 (new users only): name + consent -->
+  <form id="regForm" hidden>
+    <p class="note" style="margin:0">Masuk sebagai <b id="regEmail"></b></p>
     <input type="text" name="name" placeholder="Nama Lengkap" required maxlength="60" autocomplete="name">
-    <input type="email" name="email" placeholder="Alamat Surel" required autocomplete="email">
     <div class="consent" id="consentText" data-version="2026-11-25"><!-- change with CONSENT_VERSION in Code.gs -->
       <p style="text-align:center"><b>SURAT PERNYATAAN DAN PERSETUJUAN PENGGUNAAN MATERI VIDEO</b><br><i>(USER-GENERATED CONTENT CONSENT &amp; RELEASE FORM)</i></p>
       <p>Surat Pernyataan dan Persetujuan Penggunaan Materi Video (“Pernyataan”) ini dibuat dan disetujui secara elektronik melalui situs web resmi oleh pihak yang mengisi data di bawah ini:</p>
@@ -223,17 +241,9 @@
     <p class="err" id="regErr"></p>
     <button class="btn wide" type="submit">Unggah Videomu</button>
   </form>
-  <div class="alt" id="toLogin">Sudah pernah daftar? <button class="link" id="showLogin" type="button">Login</button></div>
-  <form id="loginForm" hidden>
-    <h3>Login</h3>
-    <p class="note" style="text-align:center;margin:-4px 0 4px">Masuk dengan email yang kamu pakai saat mendaftar.</p>
-    <input type="email" name="email" placeholder="Email yang sudah terdaftar" required autocomplete="email">
-    <p class="err" id="loginErr"></p>
-    <button class="btn wide" type="submit">Login dengan Email</button>
-  </form>
-  <div class="alt" id="toSignup" hidden>Belum pernah daftar? <button class="link" id="showSignup" type="button">Daftar di sini</button></div>
 </dialog>
 
+<script src="https://accounts.google.com/gsi/client" async></script>
 <script src="app.js"></script>
 </body>
 </html>

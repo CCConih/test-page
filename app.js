@@ -1,5 +1,7 @@
-// Paste the Apps Script Web App URL here (see Code.gs). Empty = preview mode (localStorage, no real upload).
+// Apps Script Web App URL (see Code.gs).
 const API_URL = 'https://script.google.com/macros/s/AKfycbyyVZvBLuOZz7qteS06Y6gLOIhEKL1D6PBXNP2fImdsNbf9QgwSQ7Pom1nEp65fT3z-Ow/exec';
+// OAuth "Web application" client ID from Google Cloud Console; same value as GOOGLE_CLIENT_ID in Code.gs.
+const GOOGLE_CLIENT_ID = 'PASTE_CLIENT_ID.apps.googleusercontent.com';
 
 const SONGS = [
   ['Evakuasi', 'Footage aktivitasmu memulai hari'],
@@ -31,14 +33,16 @@ function videoDuration(file) {
 }
 
 const $ = (id) => document.getElementById(id);
-let user = null;   // { name, email, subs: { [songIndex]: fileName } }
+let user = null;    // { name, email, session, subs: { [songIndex]: fileName } }
+let pending = null; // after Google sign-in, before a new user finishes sign-up: { session, email }
 let current = 0;
 
-// ---------- API (real = Apps Script, mock = localStorage) ----------
+// ---------- API (Apps Script) ----------
+// Every request carries the session id the server issued at Google sign-in; the server works out the email from it.
 async function call(action, data) {
-  if (!API_URL) return mockCall(action, data);
+  const session = user?.session || pending?.session;
   // text/plain avoids a CORS preflight, which Apps Script can't answer.
-  const send = () => fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action, ...data }) }).then((r) => r.json());
+  const send = () => fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action, session, ...data }) }).then((r) => r.json());
   // Apps Script answers with a Google error page (seen as a network/CORS failure) when more than 30 requests run at once.
   // Up to 2 quiet retries, waiting ~1.5 s then ~3 s plus a random extra, so a crowd's retries don't all land together.
   // Safe for every action: register finds the existing folder (worst case an extra consent record), the rest are repeatable.
@@ -48,6 +52,7 @@ async function call(action, data) {
     try { json = await send(); break; } catch { /* try again */ }
   }
   if (!json) throw new Error('Koneksi bermasalah. Periksa internetmu, lalu coba lagi.');
+  if (json.error && /Sesi berakhir/.test(json.error) && action !== 'login') signOut(true); // sessions last 6 h: ask to sign in again
   if (json.error) throw new Error(json.error);
   return json;
 }
@@ -60,19 +65,7 @@ function busy(b, on, label = 'Memproses…') {
   b.setAttribute('aria-busy', on);
 }
 
-function mockCall(action, { name, email, song, fileName }) {
-  const db = JSON.parse(localStorage.getItem('mdb_db') || '{}');
-  const save = () => localStorage.setItem('mdb_db', JSON.stringify(db));
-  if (action === 'register') { db[email] ??= { name, subs: {} }; save(); return { name: db[email].name, subs: db[email].subs }; }
-  if (action === 'login') { if (!db[email]) throw new Error('Email belum terdaftar.'); return { name: db[email].name, subs: db[email].subs }; }
-  if (action === 'startUpload') { db[email].subs[song] = fileName; save(); return { uploadUrl: null }; }
-  if (action === 'finishUpload') return {};
-}
-
 function putFile(url, file, onProgress) {
-  if (!url) { // mock: fake progress
-    return new Promise((ok) => { let p = 0; const t = setInterval(() => { onProgress(p += 20); if (p >= 100) { clearInterval(t); ok(); } }, 150); });
-  }
   return new Promise((ok, fail) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url);
@@ -143,28 +136,77 @@ function renderSong() {
 }
 
 function login(data) {
-  user = { name: data.name, email: data.email, subs: data.subs || {} };
-  localStorage.setItem('mdb_session', JSON.stringify({ name: user.name, email: user.email }));
+  user = { name: data.name, email: data.email, session: data.session, subs: data.subs || {} };
+  pending = null;
+  localStorage.setItem('mdb_session', JSON.stringify({ name: user.name, email: user.email, session: user.session }));
 }
 
-// ---------- Events ----------
-// The pop-up shows either the sign-up part (fields + consent) or the login part, never both.
-function popupMode(login) {
-  for (const id of ['regForm', 'toLogin']) $(id).hidden = login;
-  for (const id of ['loginForm', 'toSignup']) $(id).hidden = !login;
-  $('consent').scrollTop = 0;
-  if (login) $('loginForm').email.focus(); // not on sign-up: a phone keyboard would cover the consent text
+// Forget the signed-in user on this device; `expired` = the server's 6-hour session ran out, so offer sign-in again.
+function signOut(expired) {
+  user = null; pending = null;
+  localStorage.removeItem('mdb_session');
+  window.google?.accounts?.id?.disableAutoSelect();
+  show('home');
+  if (expired) openPopup();
 }
-$('startBtn').onclick = () => { if (user) return show('grid'); $('consent').showModal(); popupMode(false); };
+
+// ---------- Google sign-in ----------
+// Instagram, TikTok, Facebook, LINE, X etc. open links in their own browser, where Google refuses to sign in.
+const IN_APP = /Instagram|FBAN|FBAV|FB_IAB|TikTok|musical_ly|BytedanceWebview|Line\/|Twitter|LinkedInApp|Snapchat|; wv\)/i.test(navigator.userAgent);
+
+function openPopup() {
+  $('googleStep').hidden = false; $('regForm').hidden = true;
+  $('authErr').textContent = ''; $('authBusy').hidden = true;
+  $('inApp').hidden = !IN_APP; $('gBtn').hidden = IN_APP;
+  if (IN_APP && /Android/i.test(navigator.userAgent)) { // Android can hand the page to Chrome directly
+    $('openChrome').href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;end`;
+    $('openChrome').hidden = false;
+  }
+  if (!$('consent').open) $('consent').showModal();
+  $('consent').scrollTop = 0;
+  renderGoogleButton();
+}
+
+// The Google library loads in the background; draw its button when both it and the pop-up are ready.
+function renderGoogleButton() {
+  if (IN_APP || !window.google?.accounts?.id || !$('consent').open) return;
+  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleSignIn, ux_mode: 'popup', context: 'signin' });
+  google.accounts.id.renderButton($('gBtn'), { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', width: 280, locale: 'id' });
+}
+window.onGoogleLibraryLoad = renderGoogleButton;
+
+async function onGoogleSignIn({ credential }) {
+  $('authErr').textContent = ''; $('gBtn').hidden = true; $('authBusy').hidden = false;
+  try {
+    const res = await call('auth', { idToken: credential });
+    if (res.registered) { login(res); $('consent').close(); show('grid'); return; }
+    // New here: ask for their name and consent. The email shown is the one Google confirmed.
+    pending = { session: res.session, email: res.email };
+    $('regEmail').textContent = $('cEmail').textContent = res.email;
+    $('regForm').name.value = res.googleName; $('cName').textContent = res.googleName || '—';
+    const f = $('regForm'); f.agree.checked = false; f.agree.disabled = true; $('scrollHint').hidden = false; $('consentText').scrollTop = 0;
+    $('googleStep').hidden = true; f.hidden = false;
+    checkConsentRead();
+  } catch (err) { $('authErr').textContent = err.message; $('gBtn').hidden = false; }
+  finally { $('authBusy').hidden = true; }
+}
+
+$('copyLink').onclick = async () => {
+  try { await navigator.clipboard.writeText(location.href); $('copyLink').textContent = 'Link disalin ✓'; }
+  catch { prompt('Salin link ini, lalu buka di Chrome atau Safari:', location.href); }
+};
+
+// ---------- Events ----------
+$('startBtn').onclick = () => (user ? show('grid') : openPopup());
 // Consent: tick box unlocks only once the statement is scrolled to the end; name/email echo into the statement.
 function checkConsentRead() {
+  if ($('regForm').hidden) return; // a hidden box measures 0 tall and would count as "read"
   const c = $('consentText');
   if (c.scrollTop + c.clientHeight >= c.scrollHeight - 8) { $('regForm').agree.disabled = false; $('scrollHint').hidden = true; }
 }
 $('consentText').onscroll = checkConsentRead;
 $('consent').addEventListener('toggle', checkConsentRead); // in case it all fits without scrolling
 $('regForm').name.oninput = (e) => ($('cName').textContent = e.target.value.trim() || '—');
-$('regForm').email.oninput = (e) => ($('cEmail').textContent = e.target.value.trim() || '—');
 // Tap anywhere outside the card closes the pop-up. Outside taps land on the <dialog> itself (its backdrop);
 // keyboard "clicks" land on the button inside, so they never close it. Not while a sign-up/login is still sending.
 $('consent').addEventListener('click', (e) => {
@@ -172,33 +214,18 @@ $('consent').addEventListener('click', (e) => {
   const outside = e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
   if (e.target === d && outside && !d.querySelector('.loading')) d.close();
 });
-$('showLogin').onclick = () => popupMode(true);
-$('showSignup').onclick = () => popupMode(false);
-
 $('regForm').onsubmit = async (e) => {
   e.preventDefault();
-  const f = e.target, name = f.name.value.trim(), email = f.email.value.trim().toLowerCase();
+  const f = e.target, name = f.name.value.trim(), { session, email } = pending;
   $('regErr').textContent = ''; busy(f.querySelector('[type=submit]'), true);
   try {
     // Server saves its own copy of the statement; the version proves this page showed that same copy.
     const consentVersion = $('consentText').dataset.version;
-    const res = await call('register', { name, email, agreed: f.agree.checked, consentVersion });
-    login({ ...res, email });
+    const res = await call('register', { name, agreed: f.agree.checked, consentVersion });
+    login({ ...res, email, session });
     $('consent').close(); show('grid');
   } catch (err) { $('regErr').textContent = err.message; }
   finally { busy(f.querySelector('[type=submit]'), false); }
-};
-
-$('loginForm').onsubmit = async (e) => {
-  e.preventDefault();
-  const email = e.target.email.value.trim().toLowerCase();
-  $('loginErr').textContent = ''; busy(e.target.querySelector('[type=submit]'), true);
-  try {
-    const res = await call('login', { email });
-    login({ ...res, email });
-    $('consent').close(); show('grid');
-  } catch (err) { $('loginErr').textContent = err.message; }
-  finally { busy(e.target.querySelector('[type=submit]'), false); }
 };
 
 $('uploadBtn').onclick = () => $('fileInput').click();
@@ -214,9 +241,9 @@ $('fileInput').onchange = async (e) => {
   $('uploadBtn').disabled = true; $('uploadErr').textContent = ''; $('progress').hidden = false;
   const bar = $('progress').firstElementChild;
   try {
-    const { uploadUrl } = await call('startUpload', { email: user.email, song, fileName: file.name, mimeType: file.type, size: file.size });
+    const { uploadUrl } = await call('startUpload', { song, fileName: file.name, mimeType: file.type, size: file.size });
     await putFile(uploadUrl, file, (p) => (bar.style.width = p + '%'));
-    await call('finishUpload', { email: user.email, song }).catch(() => {}); // cleanup only; the new file is already saved
+    await call('finishUpload', { song }).catch(() => {}); // cleanup only; the new file is already saved
     user.subs[song] = file.name;
     if (current === song) renderSong();
   } catch (err) { $('uploadErr').textContent = err.message; }
@@ -228,15 +255,14 @@ $('nextBtn').onclick = () => transition(() => { current++; renderSong(); });
 $('toGridBtn').onclick = () => show('grid');
 $('finishBtn').onclick = () => show('done');
 $('backBtn').onclick = () => show('grid');
-$('logoutBtn').onclick = () => { localStorage.removeItem('mdb_session'); user = null; show('home'); };
+$('logoutBtn').onclick = () => { call('logout').catch(() => {}); signOut(false); };
 
 // Resume saved session: refresh submissions from the server so other devices' uploads show up.
 (async () => {
-  $('mockBanner').hidden = !!API_URL;
   const saved = JSON.parse(localStorage.getItem('mdb_session') || 'null');
-  if (!saved) return;
+  if (!saved?.session) return localStorage.removeItem('mdb_session'); // saved before Google sign-in existed
   busy($('startBtn'), true, 'Memuat…'); // otherwise a tap here mid-sign-in opens the sign-up form
-  try { login({ ...(await call('login', { email: saved.email })), email: saved.email }); }
-  catch (err) { if (/belum terdaftar/.test(err.message)) localStorage.removeItem('mdb_session'); } // keep the session on a connection blip
+  try { user = saved; login({ ...(await call('login')), email: saved.email, session: saved.session }); }
+  catch (err) { user = null; if (/Sesi berakhir|belum terdaftar/.test(err.message)) localStorage.removeItem('mdb_session'); } // keep it on a connection blip
   finally { busy($('startBtn'), false); }
 })();

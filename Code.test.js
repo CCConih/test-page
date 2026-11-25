@@ -28,11 +28,15 @@ function load(driveFolders, driveFiles, { knownUser = true } = {}) {
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => 'R' }) },
     DriveApp: { getFolderById: (id) => byId[id] },
     // sleep = time passing while another request works; a test can make that other request finish here
-    Utilities: { formatDate: () => '2026-11-25 10:00:00 WIB', sleep: () => { counts.sleeps++; const h = counts.whileWaiting; counts.whileWaiting = null; if (h) h(); } },
+    Utilities: { formatDate: () => '2026-11-25 10:00:00 WIB', getUuid: () => '0f8b5c1e-4a2d-4c3b-9e7f-112233445566',
+      sleep: () => { counts.sleeps++; const h = counts.whileWaiting; counts.whileWaiting = null; if (h) h(); } },
     MimeType: { PLAIN_TEXT: 'text/plain' },
+    ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (s) => ({ setMimeType: () => s }) },
     ScriptApp: { getOAuthToken: () => 'token' },
     UrlFetchApp: { fetch: (url) => {
       if (url.includes('uploadType=resumable')) return { getHeaders: () => ({ Location: 'https://upload.example/session' }) };
+      // Google's tokeninfo: a test sets counts.google to what Google would say about the token ({ status, body })
+      if (url.includes('tokeninfo')) return { getResponseCode: () => counts.google.status, getContentText: () => JSON.stringify(counts.google.body) };
       const q = decodeURIComponent(url.split('&q=')[1]); fetched.push(q);
       const files = q.includes('mimeType') ? driveFolders : driveFiles.filter((f) => f.parents.some((p) => q.includes(`'${p}' in parents`)));
       return { getContentText: () => JSON.stringify({ files }) };
@@ -124,6 +128,60 @@ const SIGNUP = { agreed: true, consentVersion: '2026-11-25' };
   ctx.register('Budi Santoso', 'budi@x.com', SIGNUP);
   assert.strictEqual(counts.sleeps, 0);
   assert.strictEqual(counts.rootCreates, 0);
+}
+
+// ---------- Google sign-in and sessions ----------
+const ID = 'PASTE_CLIENT_ID.apps.googleusercontent.com'; // GOOGLE_CLIENT_ID as set in Code.gs
+const GOOD = (email, extra = {}) => ({ status: 200, body: { aud: ID, iss: 'https://accounts.google.com', email, email_verified: 'true', name: 'Budi Santoso', ...extra } });
+const post = (ctx, body) => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(body) } }));
+
+// A known user is signed straight in; the session maps to the email Google confirmed.
+{
+  const { ctx, cache, counts } = load([], []);
+  counts.google = GOOD('Budi@X.com');
+  const r = post(ctx, { action: 'auth', idToken: 'tok' });
+  assert.strictEqual(r.registered, true); assert.strictEqual(r.name, 'Budi Santoso'); assert.strictEqual(r.email, 'budi@x.com');
+  assert.strictEqual(cache.get('sess:' + r.session), 'budi@x.com');
+}
+
+// A new user gets a session but must still sign up (name + consent).
+{
+  const { ctx, counts } = load([], [], { knownUser: false });
+  counts.google = GOOD('sari@x.com', { name: 'Sari' });
+  const r = post(ctx, { action: 'auth', idToken: 'tok' });
+  assert.strictEqual(r.registered, false); assert.strictEqual(r.googleName, 'Sari'); assert.ok(!('subs' in r));
+}
+
+// Tokens Google rejects, or that were made for another site, or with an unconfirmed email, give no session.
+for (const [why, google] of [
+  ['Google says invalid', { status: 400, body: { error: 'invalid_token' } }],
+  ['issued for another site', GOOD('budi@x.com', { aud: 'someone-else.apps.googleusercontent.com' })],
+  ['not issued by Google', GOOD('budi@x.com', { iss: 'evil.example.com' })],
+  ['email not confirmed', GOOD('budi@x.com', { email_verified: 'false' })],
+  ['email with a quote', GOOD("bu'di@x.com")],
+]) {
+  const { ctx, cache, counts } = load([], []);
+  counts.google = google;
+  assert.match(post(ctx, { action: 'auth', idToken: 'tok' }).error, /Login Google gagal/, why);
+  assert.ok(![...cache.keys()].some((k) => k.startsWith('sess:')), why + ': no session created');
+}
+
+// Every other action needs a valid session, and acts as the session's account even if the request names someone else.
+{
+  const { ctx, cache } = load([], []);
+  cache.set('sess:0f8b5c1e-4a2d-4c3b-9e7f-112233445566', 'budi@x.com');
+  assert.strictEqual(post(ctx, { action: 'login', session: '0f8b5c1e-4a2d-4c3b-9e7f-112233445566', email: 'victim@x.com' }).name, 'Budi Santoso');
+  for (const session of [undefined, '', 'not-a-session', '00000000-0000-0000-0000-000000000000'])
+    assert.match(post(ctx, { action: 'login', session, email: 'budi@x.com' }).error, /Sesi berakhir/, `session ${session}`);
+  assert.match(post(ctx, { action: 'startUpload', email: 'budi@x.com', song: 1, mimeType: 'video/mp4', size: 10 }).error, /Sesi berakhir/);
+}
+
+// Logging out ends the session on the server too.
+{
+  const { ctx, cache } = load([], []);
+  const s = '0f8b5c1e-4a2d-4c3b-9e7f-112233445566'; cache.set('sess:' + s, 'budi@x.com');
+  post(ctx, { action: 'logout', session: s });
+  assert.match(post(ctx, { action: 'login', session: s }).error, /Sesi berakhir/);
 }
 
 // The consent statement exists twice: on the page (what people read) and in Code.gs (what gets saved as their record).
