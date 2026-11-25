@@ -38,10 +38,24 @@ let current = 0;
 async function call(action, data) {
   if (!API_URL) return mockCall(action, data);
   // text/plain avoids a CORS preflight, which Apps Script can't answer.
-  const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action, ...data }) });
-  const json = await res.json();
+  const send = () => fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action, ...data }) }).then((r) => r.json());
+  let json;
+  // Apps Script sometimes answers with a Google error page (seen as a network/CORS failure); one quiet retry covers it.
+  // Safe for every action: register finds the existing folder (worst case an extra consent record), the rest are repeatable.
+  try { json = await send(); }
+  catch {
+    await new Promise((ok) => setTimeout(ok, 1500));
+    try { json = await send(); } catch { throw new Error('Koneksi bermasalah. Periksa internetmu, lalu coba lagi.'); }
+  }
   if (json.error) throw new Error(json.error);
   return json;
+}
+
+// Disables a form's submit button while a request runs: shows progress and stops double sign-ups.
+function busy(form, on) {
+  const b = form.querySelector('[type=submit]');
+  if (on) { b.dataset.label = b.textContent; b.textContent = 'Memproses…'; } else b.textContent = b.dataset.label;
+  b.disabled = on;
 }
 
 function mockCall(action, { name, email, song, fileName }) {
@@ -134,6 +148,7 @@ $('showLogin').onclick = () => { $('loginForm').hidden = false; $('loginForm').e
 $('regForm').onsubmit = async (e) => {
   e.preventDefault();
   const f = e.target, name = f.name.value.trim(), email = f.email.value.trim().toLowerCase();
+  $('regErr').textContent = ''; busy(f, true);
   try {
     // Server saves its own copy of the statement; the version proves this page showed that same copy.
     const consentVersion = $('consentText').dataset.version;
@@ -141,16 +156,19 @@ $('regForm').onsubmit = async (e) => {
     login({ ...res, email });
     $('consent').close(); show('grid');
   } catch (err) { $('regErr').textContent = err.message; }
+  finally { busy(f, false); }
 };
 
 $('loginForm').onsubmit = async (e) => {
   e.preventDefault();
   const email = e.target.email.value.trim().toLowerCase();
+  $('loginErr').textContent = ''; busy(e.target, true);
   try {
     const res = await call('login', { email });
     login({ ...res, email });
     $('consent').close(); show('grid');
   } catch (err) { $('loginErr').textContent = err.message; }
+  finally { busy(e.target, false); }
 };
 
 $('uploadBtn').onclick = () => $('fileInput').click();
@@ -188,5 +206,5 @@ $('logoutBtn').onclick = () => { localStorage.removeItem('mdb_session'); user = 
   const saved = JSON.parse(localStorage.getItem('mdb_session') || 'null');
   if (!saved) return;
   try { login({ ...(await call('login', { email: saved.email })), email: saved.email }); }
-  catch { localStorage.removeItem('mdb_session'); }
+  catch (err) { if (/belum terdaftar/.test(err.message)) localStorage.removeItem('mdb_session'); } // keep the session on a connection blip
 })();
