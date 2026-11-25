@@ -30,12 +30,22 @@ function doPost(e) {
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
+// Drive search lags a few seconds behind new folders, so a just-created folder is remembered here first.
+// shortcut: the cache keeps entries up to 6 h and may drop them early; after that the Drive search (by then up to date) takes over.
 function userFolder(email) {
+  const cache = CacheService.getScriptCache();
+  const id = cache.get('folder:' + email);
+  if (id) {
+    try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) { /* deleted: fall back to search */ }
+    cache.remove('folder:' + email);
+  }
   // Email is validated above (no quotes), so it's safe inside the query string.
   const it = root().searchFolders(`title contains '_${email}' and trashed = false`);
-  while (it.hasNext()) { const f = it.next(); if (f.getName().endsWith('_' + email)) return f; }
+  while (it.hasNext()) { const f = it.next(); if (f.getName().endsWith('_' + email)) return rememberFolder(email, f); }
   return null;
 }
+
+function rememberFolder(email, f) { CacheService.getScriptCache().put('folder:' + email, f.getId(), 21600); return f; }
 
 function songFolderName(i) { return String(i + 1).padStart(2, '0') + ' - ' + SONGS[i]; }
 
@@ -44,13 +54,17 @@ function register(name, email, d) {
   if (d.agreed !== true) throw new Error('Persetujuan wajib dicentang.');
   // The page shows its own copy of the statement; refuse if it isn't the version saved below.
   if (d.consentVersion !== CONSENT_VERSION) throw new Error('Halaman sudah diperbarui. Muat ulang halaman, lalu coba lagi.');
-  const lock = LockService.getScriptLock(); lock.waitLock(10000); // avoid duplicate folders on double-submit
+  // Lock only "find, else create" so two requests for one email can't both create a folder.
+  // Everything slow (consent file, reading song folders) runs after release, so sign-ups don't queue behind each other.
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) throw new Error('Server sedang sibuk. Coba lagi sebentar lagi.');
+  let existing, f;
   try {
-    const existing = userFolder(email);
-    const f = existing || root().createFolder(name.replace(/[\/\\]/g, '') + '_' + email);
-    saveConsent(f, name, email);
-    return existing ? login(email) : { name, subs: {} };
+    existing = userFolder(email);
+    f = existing || rememberFolder(email, root().createFolder(name.replace(/[\/\\]/g, '') + '_' + email));
   } finally { lock.releaseLock(); }
+  saveConsent(f, name, email);
+  return existing ? login(email) : { name, subs: {} };
 }
 
 // One record per time the user agrees; timestamp comes from Google's server, not the user's device.

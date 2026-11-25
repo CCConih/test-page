@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tests — call() retry</title>
+<!-- Open over http (e.g. the test page URL + /test.html). Loads the real page in a hidden frame and fakes its network. -->
+<pre id="out">Running…</pre>
+<iframe id="app" src="index.html" hidden></iframe>
+<script>
+const out = document.getElementById('out');
+document.getElementById('app').onload = async (e) => {
+  const w = e.target.contentWindow;
+  let plan = [], calls = 0;
+  // Each planned step: 'net' = network failure, otherwise the JSON the server answers with.
+  w.fetch = () => { calls++; const s = plan.shift(); return s === 'net' ? Promise.reject(new TypeError('Failed to fetch')) : Promise.resolve(new Response(JSON.stringify(s))); };
+  const run = async (steps) => { plan = steps; calls = 0; try { return { ok: await w.call('login', { email: 't@x.com' }), calls }; } catch (err) { return { err: err.message, calls }; } };
+
+  const cases = [
+    ['works first time',         [{ name: 'A' }],              (r) => r.ok?.name === 'A' && r.calls === 1],
+    ['one failure, then retry',  ['net', { name: 'A' }],       (r) => r.ok?.name === 'A' && r.calls === 2],
+    ['two failures',             ['net', 'net'],               (r) => /Koneksi bermasalah/.test(r.err) && r.calls === 2],
+    ['server error, no retry',   [{ error: 'Email belum terdaftar.' }], (r) => r.err === 'Email belum terdaftar.' && r.calls === 1],
+  ];
+  let failed = 0; const lines = [];
+  for (const [name, steps, pass] of cases) {
+    const r = await run(steps); const ok = pass(r); if (!ok) failed++;
+    lines.push(`${ok ? 'PASS' : 'FAIL'}  ${name}  ${JSON.stringify(r)}`);
+  }
+  lines.push(failed ? `${failed} FAILED` : 'ALL PASSED');
+  out.textContent = lines.join('\n'); console.log(out.textContent);
+};
+</script>
