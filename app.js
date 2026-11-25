@@ -137,8 +137,7 @@ $('regForm').onsubmit = async (e) => {
   try {
     // Server saves its own copy of the statement; the version proves this page showed that same copy.
     const consentVersion = $('consentText').dataset.version;
-    const consent = $('consentText').innerText + '\n\n[X] ' + $('agreeLabel').innerText.trim(); // shortcut: only for the pre-redeploy backend, remove once Code.gs is redeployed
-    const res = await call('register', { name, email, agreed: f.agree.checked, consentVersion, consent });
+    const res = await call('register', { name, email, agreed: f.agree.checked, consentVersion });
     login({ ...res, email });
     $('consent').close(); show('grid');
   } catch (err) { $('regErr').textContent = err.message; }
