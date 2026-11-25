@@ -33,15 +33,20 @@ function doPost(e) {
 // Drive search lags a few seconds behind new folders, so a just-created folder is remembered here first.
 // shortcut: the cache keeps entries up to 6 h and may drop them early; after that the Drive search (by then up to date) takes over.
 function userFolder(email) {
-  const cache = CacheService.getScriptCache();
-  const id = cache.get('folder:' + email);
-  if (id) {
-    try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) { /* deleted: fall back to search */ }
-    cache.remove('folder:' + email);
-  }
+  const cached = cachedFolder(email);
+  if (cached) return cached;
   // Email is validated above (no quotes), so it's safe inside the query string.
   const it = root().searchFolders(`title contains '_${email}' and trashed = false`);
   while (it.hasNext()) { const f = it.next(); if (f.getName().endsWith('_' + email)) return rememberFolder(email, f); }
+  return null;
+}
+
+function cachedFolder(email) {
+  const cache = CacheService.getScriptCache();
+  const id = cache.get('folder:' + email);
+  if (!id) return null;
+  try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) { /* deleted: fall back to search */ }
+  cache.remove('folder:' + email);
   return null;
 }
 
@@ -54,15 +59,17 @@ function register(name, email, d) {
   if (d.agreed !== true) throw new Error('Persetujuan wajib dicentang.');
   // The page shows its own copy of the statement; refuse if it isn't the version saved below.
   if (d.consentVersion !== CONSENT_VERSION) throw new Error('Halaman sudah diperbarui. Muat ulang halaman, lalu coba lagi.');
-  // Lock only "find, else create" so two requests for one email can't both create a folder.
-  // Everything slow (consent file, reading song folders) runs after release, so sign-ups don't queue behind each other.
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(15000)) throw new Error('Server sedang sibuk. Coba lagi sebentar lagi.');
-  let existing, f;
-  try {
-    existing = userFolder(email);
-    f = existing || rememberFolder(email, root().createFolder(name.replace(/[\/\\]/g, '') + '_' + email));
-  } finally { lock.releaseLock(); }
+  // The slow Drive search runs outside the lock. The lock (one script-wide lock shared by every visitor) only covers
+  // "re-check the cache, else create", so two requests for one new email can't both create a folder.
+  let existing = userFolder(email), f = existing;
+  if (!f) {
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(15000)) throw new Error('Server sedang sibuk. Coba lagi sebentar lagi.');
+    try {
+      existing = f = cachedFolder(email); // created by a parallel request while we waited
+      if (!f) f = rememberFolder(email, root().createFolder(name.replace(/[\/\\]/g, '') + '_' + email));
+    } finally { lock.releaseLock(); }
+  }
   saveConsent(f, name, email);
   if (existing) return login(email);
   const fresh = { name, subs: {} };
@@ -113,7 +120,7 @@ g. Kontributor menjamin kebenaran seluruh data yang diisi dan menyatakan telah b
 [X] Saya telah membaca, memahami dan menyetujui seluruh syarat dan ketentuan di atas secara sadar dan tanpa paksaan dari pihak manapun untuk dapat dipergunakan sebagaimana mestinya`;
 
 // Each user's upload list is kept in the script cache, so a returning user skips Drive entirely.
-// shortcut: files changed by hand in Drive show up only when the entry expires (max 6 h); uploads made through the site update it at once.
+// shortcut: files changed by hand in Drive show up only when the entry expires (max 6 h); uploads made through the site clear it at once (forgetSubs).
 function login(email) {
   const cache = CacheService.getScriptCache();
   const hit = cache.get('subs:' + email);
@@ -159,6 +166,7 @@ function startUpload(email, d) {
   if (!f) throw new Error('Email belum terdaftar.');
   const it = f.getFoldersByName(songFolderName(i));
   const sf = it.hasNext() ? it.next() : f.createFolder(songFolderName(i));
+  forgetSubs(email);
   // Old file is removed only in finishUpload, after the new one has fully arrived, so a failed re-upload never loses it.
   const res = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
     method: 'post',
@@ -188,25 +196,13 @@ function finishUpload(email, d) {
   while (all.hasNext()) files.push(all.next());
   files.sort((a, b) => b.getDateCreated() - a.getDateCreated());
   files.slice(1).forEach((x) => x.setTrashed(true));
-  const kept = files[0] ? files[0].getName() : null;
-  if (kept) updateCachedSubs(email, i, kept);
-  return { kept };
+  forgetSubs(email); // a login during the upload may have cached the list without this file
+  return { kept: files[0] ? files[0].getName() : null };
 }
 
-// Keeps the cached upload list (see login) in step with uploads made through the site.
-// Locked so two uploads finishing at the same moment can't overwrite each other's entry.
-function updateCachedSubs(email, i, fileName) {
-  const cache = CacheService.getScriptCache(), key = 'subs:' + email;
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) { cache.remove(key); return; } // can't update safely: drop it, the next login reads Drive
-  try {
-    const hit = cache.get(key);
-    if (!hit) return; // nothing cached: the next login reads Drive, which already has the file
-    const r = JSON.parse(hit);
-    r.subs[i] = fileName;
-    cache.put(key, JSON.stringify(r), 21600);
-  } finally { lock.releaseLock(); }
-}
+// Drops the cached upload list (see login) so the next login reads Drive. Called when an upload starts AND when it
+// finishes: if the finish call is lost under load, the list cleared at start still can't show the song as missing.
+function forgetSubs(email) { CacheService.getScriptCache().remove('subs:' + email); }
 
 const ROOT_NAME = 'MDB 7 Tahun - UGC Submissions';
 
