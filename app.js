@@ -165,6 +165,13 @@ $('consentText').onscroll = checkConsentRead;
 $('consent').addEventListener('toggle', checkConsentRead); // in case it all fits without scrolling
 $('regForm').name.oninput = (e) => ($('cName').textContent = e.target.value.trim() || '—');
 $('regForm').email.oninput = (e) => ($('cEmail').textContent = e.target.value.trim() || '—');
+// Tap anywhere outside the card closes the pop-up. Outside taps land on the <dialog> itself (its backdrop);
+// keyboard "clicks" land on the button inside, so they never close it. Not while a sign-up/login is still sending.
+$('consent').addEventListener('click', (e) => {
+  const d = e.currentTarget, r = d.getBoundingClientRect();
+  const outside = e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+  if (e.target === d && outside && !d.querySelector('.loading')) d.close();
+});
 $('showLogin').onclick = () => popupMode(true);
 $('showSignup').onclick = () => popupMode(false);
 
