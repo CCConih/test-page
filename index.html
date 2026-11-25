@@ -99,26 +99,25 @@
   .progress { height: 8px; background: rgba(244, 236, 221, .18); border-radius: 4px; overflow: hidden; margin: 14px 0 0; }
   .progress div { height: 100%; background: var(--rust-light); width: 0; transition: width .2s; }
 
-  /* Consent dialog stays a cream paper card: long legal text reads best dark-on-light */
-  dialog { border: 2px solid var(--rust); border-radius: 20px; padding: 24px 20px 18px; max-width: 420px; width: calc(100% - 28px); max-height: calc(100dvh - 28px); background: var(--paper); color: var(--ink); }
+  /* Consent dialog: dark card matching the site; legal text in cream on a darker inset for contrast */
+  dialog { border: 1.5px solid rgba(238, 122, 80, .55); border-radius: 20px; padding: 24px 20px 18px; max-width: 420px; width: calc(100% - 28px); max-height: calc(100dvh - 28px);
+    background: #1E1916; color: var(--paper); box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
   dialog::backdrop { background: rgba(10, 8, 7, .72); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
-  dialog h3 { font-size: 28px; text-align: center; margin-bottom: 4px; color: var(--rust); }
-  dialog .link { color: var(--rust); }
-  dialog :focus-visible { outline-color: var(--ink); }
+  dialog h3 { font-size: 28px; text-align: center; margin-bottom: 4px; color: var(--paper); }
   form { display: flex; flex-direction: column; gap: 12px; text-align: left; }
-  input[type=text], input[type=email] { padding: 13px 14px; border: 1.5px solid #CDB89B; border-radius: 12px; font: 16px var(--display); background: var(--field); color: var(--ink); }
-  input[type=text]:focus, input[type=email]:focus { outline: none; border-color: var(--rust); box-shadow: 0 0 0 3px rgba(186, 50, 13, .15); }
-  input::placeholder { color: #A08876; }
+  input[type=text], input[type=email] { padding: 13px 14px; border: 1.5px solid rgba(244, 236, 221, .28); border-radius: 12px; font: 16px var(--display); background: #2A2320; color: var(--paper); }
+  input[type=text]:focus, input[type=email]:focus { outline: none; border-color: var(--rust-light); box-shadow: 0 0 0 3px rgba(238, 122, 80, .2); }
+  input::placeholder { color: #9C8B7C; }
   label.check { display: flex; gap: 10px; font-size: 13px; line-height: 1.45; align-items: flex-start; }
-  label.check input { accent-color: var(--rust); width: 18px; height: 18px; flex: none; margin-top: 1px; }
-  label.check:has(input:disabled) { opacity: .45; }
-  .consent { max-height: 34vh; overflow: auto; background: var(--paper-2); padding: 14px; border-radius: 12px; font: 12px/1.6 var(--type); overscroll-behavior: contain; }
-  .consent p:first-child { font-family: var(--display); color: var(--rust); font-size: 13px; }
+  label.check input { accent-color: var(--rust-light); width: 18px; height: 18px; flex: none; margin-top: 1px; }
+  label.check:has(input:disabled) { opacity: .5; }
+  .consent { max-height: 34vh; overflow: auto; background: #120E0C; border: 1px solid rgba(244, 236, 221, .12); padding: 14px; border-radius: 12px; font: 12px/1.6 var(--type);
+    color: #E6DCCB; overscroll-behavior: contain; scrollbar-color: rgba(244, 236, 221, .35) transparent; }
+  .consent p:first-child { font-family: var(--display); color: var(--rust-light); font-size: 13px; }
   .consent ol { padding-left: 20px; }
   .consent li { margin-bottom: 8px; }
-  .alt { border-top: 1.5px dashed rgba(186, 50, 13, .4); margin-top: 18px; padding-top: 12px; font-size: 14px; text-align: center; }
+  .alt { border-top: 1.5px dashed var(--line); margin-top: 18px; padding-top: 12px; font-size: 14px; text-align: center; }
   .err { color: #FFAA8C; font: 700 13px var(--type); min-height: 1em; margin: 0; }
-  dialog .err { color: var(--rust-dark); }
   .mock { background: var(--paper); color: var(--ink); font: 11px var(--type); padding: 6px; margin: -28px -22px 16px; }
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -202,7 +201,7 @@
         <li>Kontributor menjamin kebenaran seluruh data yang diisi dan menyatakan telah berusia minimal 18 (delapan belas) tahun atau cakap secara hukum.</li>
       </ol>
     </div>
-    <p id="scrollHint" style="font-size:12px;color:#777;margin:-4px 0 0">Gulir sampai bawah untuk menyetujui ↓</p>
+    <p id="scrollHint" style="font:12px var(--type);color:var(--muted);margin:-4px 0 0">Gulir sampai bawah untuk menyetujui ↓</p>
     <label class="check" id="agreeLabel"><input type="checkbox" name="agree" required disabled> Saya telah membaca, memahami dan menyetujui seluruh syarat dan ketentuan di atas secara sadar dan tanpa paksaan dari pihak manapun untuk dapat dipergunakan sebagaimana mestinya</label>
     <p class="err" id="regErr"></p>
     <button class="btn wide" type="submit">Unggah Videomu</button>
