@@ -1,13 +1,12 @@
 /**
  * Google Apps Script backend. Deploy: Extensions > Apps Script in any Google account,
- * paste this file, set ROOT_FOLDER_ID, Deploy > New deployment > Web app,
+ * paste this file, run authorize() once (creates the Drive folder), Deploy > New deployment > Web app,
  * "Execute as: Me", "Who has access: Anyone". Copy the URL into API_URL in app.js.
  *
  * Drive layout:  ROOT / <Name>_<email> / <NN - Song> / <uploaded files>
  * The video goes browser -> Drive directly (resumable upload), so Apps Script's 50 MB limit doesn't apply.
  */
-const ROOT_FOLDER_ID = 'PASTE_DRIVE_FOLDER_ID_HERE';
-const ALLOWED_ORIGIN = 'https://your-microsite-domain.com'; // must match the site's origin exactly, or the browser upload is blocked by CORS
+const ALLOWED_ORIGIN = 'https://ccconih.github.io'; // test page; change to the real domain at launch // must match the site's origin exactly, or the browser upload is blocked by CORS
 // Drive folder names; keep in the same order as SONGS in app.js.
 const SONGS = ['Evakuasi', 'Besok Mungkin Kita Sampai', 'Jam Makan Siang', 'Dehidrasi', 'Untuk Apa - Untuk Apa', 'Secukupnya',
   'Belum Tidur', 'Apapun yang Terjadi', 'Membasuh', 'Rumah ke Rumah', 'Mata Air', 'Evaluasi'];
@@ -32,7 +31,7 @@ function doPost(e) {
 
 function userFolder(email) {
   // Email is validated above (no quotes), so it's safe inside the query string.
-  const it = DriveApp.getFolderById(ROOT_FOLDER_ID).searchFolders(`title contains '_${email}' and trashed = false`);
+  const it = root().searchFolders(`title contains '_${email}' and trashed = false`);
   while (it.hasNext()) { const f = it.next(); if (f.getName().endsWith('_' + email)) return f; }
   return null;
 }
@@ -45,7 +44,7 @@ function register(name, email) {
   try {
     const f = userFolder(email);
     if (f) return login(email);
-    DriveApp.getFolderById(ROOT_FOLDER_ID).createFolder(name.replace(/[\/\\]/g, '') + '_' + email);
+    root().createFolder(name.replace(/[\/\\]/g, '') + '_' + email);
     return { name, subs: {} };
   } finally { lock.releaseLock(); }
 }
@@ -90,5 +89,17 @@ function startUpload(email, d) {
   return { uploadUrl: res.getHeaders().Location };
 }
 
-// Run once from the editor to grant Drive access.
-function authorize() { DriveApp.getFolderById(ROOT_FOLDER_ID).getName(); }
+const ROOT_NAME = 'MDB 7 Tahun - UGC Submissions';
+
+function root() {
+  const id = PropertiesService.getScriptProperties().getProperty('ROOT_FOLDER_ID');
+  if (!id) throw new Error('Server belum disiapkan.'); // run authorize() first
+  return DriveApp.getFolderById(id);
+}
+
+// Run once from the editor: grants Drive access and creates the submissions folder in the deploying account's Drive.
+function authorize() {
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('ROOT_FOLDER_ID')) props.setProperty('ROOT_FOLDER_ID', DriveApp.createFolder(ROOT_NAME).getId());
+  Logger.log('Submissions folder: ' + root().getUrl());
+}

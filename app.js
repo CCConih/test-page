@@ -1,5 +1,5 @@
 // Paste the Apps Script Web App URL here (see Code.gs). Empty = preview mode (localStorage, no real upload).
-const API_URL = '';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyyVZvBLuOZz7qteS06Y6gLOIhEKL1D6PBXNP2fImdsNbf9QgwSQ7Pom1nEp65fT3z-Ow/exec';
 
 const SONGS = [
   ['Evakuasi', 'Footage aktivitasmu memulai hari'],
