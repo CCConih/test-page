@@ -148,7 +148,14 @@ function login(data) {
 }
 
 // ---------- Events ----------
-$('startBtn').onclick = () => (user ? show('grid') : $('consent').showModal());
+// The pop-up shows either the sign-up part (fields + consent) or the login part, never both.
+function popupMode(login) {
+  for (const id of ['regForm', 'toLogin']) $(id).hidden = login;
+  for (const id of ['loginForm', 'toSignup']) $(id).hidden = !login;
+  $('consent').scrollTop = 0;
+  if (login) $('loginForm').email.focus(); // not on sign-up: a phone keyboard would cover the consent text
+}
+$('startBtn').onclick = () => { if (user) return show('grid'); $('consent').showModal(); popupMode(false); };
 // Consent: tick box unlocks only once the statement is scrolled to the end; name/email echo into the statement.
 function checkConsentRead() {
   const c = $('consentText');
@@ -158,7 +165,8 @@ $('consentText').onscroll = checkConsentRead;
 $('consent').addEventListener('toggle', checkConsentRead); // in case it all fits without scrolling
 $('regForm').name.oninput = (e) => ($('cName').textContent = e.target.value.trim() || '—');
 $('regForm').email.oninput = (e) => ($('cEmail').textContent = e.target.value.trim() || '—');
-$('showLogin').onclick = () => { $('loginForm').hidden = false; $('loginForm').email.focus(); };
+$('showLogin').onclick = () => popupMode(true);
+$('showSignup').onclick = () => popupMode(false);
 
 $('regForm').onsubmit = async (e) => {
   e.preventDefault();

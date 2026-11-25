@@ -218,17 +218,20 @@
         <li>Kontributor menjamin kebenaran seluruh data yang diisi dan menyatakan telah berusia minimal 18 (delapan belas) tahun atau cakap secara hukum.</li>
       </ol>
     </div>
-    <p id="scrollHint" style="font:12px var(--type);color:var(--muted);margin:-4px 0 0">Gulir sampai bawah untuk menyetujui ↓</p>
+    <p id="scrollHint" style="font:12px var(--type);color:var(--muted);margin:-4px 0 0">Geser sampai bawah untuk menyetujui ↓</p>
     <label class="check" id="agreeLabel"><input type="checkbox" name="agree" required disabled> Saya telah membaca, memahami dan menyetujui seluruh syarat dan ketentuan di atas secara sadar dan tanpa paksaan dari pihak manapun untuk dapat dipergunakan sebagaimana mestinya</label>
     <p class="err" id="regErr"></p>
     <button class="btn wide" type="submit">Unggah Videomu</button>
   </form>
-  <div class="alt">Sudah pernah daftar? <button class="link" id="showLogin">Login</button></div>
-  <form id="loginForm" hidden style="margin-top:12px">
+  <div class="alt" id="toLogin">Sudah pernah daftar? <button class="link" id="showLogin" type="button">Login</button></div>
+  <form id="loginForm" hidden>
+    <h3>Login</h3>
+    <p class="note" style="text-align:center;margin:-4px 0 4px">Masuk dengan email yang kamu pakai saat mendaftar.</p>
     <input type="email" name="email" placeholder="Email yang sudah terdaftar" required autocomplete="email">
     <p class="err" id="loginErr"></p>
     <button class="btn wide" type="submit">Login dengan Email</button>
   </form>
+  <div class="alt" id="toSignup" hidden>Belum pernah daftar? <button class="link" id="showSignup" type="button">Daftar di sini</button></div>
 </dialog>
 
 <script src="app.js"></script>
