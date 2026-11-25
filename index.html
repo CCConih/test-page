@@ -4,97 +4,162 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hindia — 7 Tahun Menari dengan Bayangan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#F4ECDD">
 <style>
-  /* Wireframe styling only — real design comes later. */
+  /* Palette + type taken from the 7th-anniversary logo: rust ink on warm paper, soft 70s serif, typewriter notes. */
+  :root {
+    --paper: #F4ECDD; --paper-2: #EADCC4; --field: #FBF6EC;
+    --rust: #B5300F; --rust-dark: #8A2208; --ink: #2B1A12; --muted: #7A5A48; --ok: #4F6B2C;
+    --display: 'Fraunces', Georgia, serif;
+    --type: 'Courier Prime', 'Courier New', monospace;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, sans-serif; background: #f2f2f2; color: #111; }
-  main { max-width: 480px; margin: 0 auto; min-height: 100vh; background: #fff; padding: 24px 20px; display: flex; flex-direction: column; text-align: center; }
-  header img { height: 48px; }
-  h1 { font-size: 15px; margin: 12px 0 20px; letter-spacing: .02em; }
-  .media { background: #ecc94b; border-radius: 10px; padding: 28px 16px; margin-bottom: 20px; font-size: 14px; }
-  .btn { display: inline-block; background: #3b5bdb; color: #fff; border: 0; border-radius: 8px; padding: 14px 24px; font-size: 15px; font-weight: 600; cursor: pointer; }
-  .btn:disabled { opacity: .5; cursor: not-allowed; }
-  .btn.small { padding: 6px 4px; font-size: 10px; width: 100%; border-radius: 4px; }
-  .btn.done { background: #63e6be; color: #111; }
-  .link { background: none; border: 0; color: #3b5bdb; text-decoration: underline; cursor: pointer; font-size: 14px; }
-  footer { margin-top: auto; padding-top: 24px; font-size: 12px; color: #777; }
-  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
-  .tile { display: flex; flex-direction: column; gap: 4px; }
-  .tile .box { aspect-ratio: 1; background: #ddd; border-radius: 6px; display: flex; align-items: center; justify-content: center; padding: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; cursor: pointer; border: 0; }
-  .tile.has .box { background: #69db7c; }
-  .pager { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-top: 16px; }
-  .progress { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin: 12px 0; }
-  .progress div { height: 100%; background: #3b5bdb; width: 0; transition: width .2s; }
-  dialog { border: 0; border-radius: 12px; padding: 24px; max-width: 400px; width: 90%; }
-  dialog::backdrop { background: rgba(0,0,0,.5); }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--display); font-variation-settings: 'SOFT' 50; -webkit-tap-highlight-color: transparent; }
+  /* Paper grain, like the print texture on the dancers */
+  body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 10; opacity: .35; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .55 0 0 0 0 .4 0 0 0 0 .28 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  main { max-width: 480px; margin: 0 auto; min-height: 100vh; min-height: 100dvh; padding: 28px 22px max(24px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; text-align: center; }
+
+  header img { display: block; margin: 0 auto; height: 64px; width: auto; }
+  body[data-view=home] header img { width: 100%; height: auto; margin-top: 8px; }
+
+  .kicker { font: 700 12px/1.4 var(--type); letter-spacing: .14em; text-transform: uppercase; color: var(--rust); margin: 22px 0 14px; }
+  h1, h2, h3 { font-family: var(--display); font-weight: 900; font-variation-settings: 'SOFT' 100, 'WONK' 1, 'opsz' 144; color: var(--rust); line-height: 1.05; margin: 0; letter-spacing: -.01em; }
+  h1 { font-size: 30px; margin: 18px 0 8px; }
+  .lede { font-size: 17px; margin: 4px 0 22px; }
+  .note { font: 13px/1.5 var(--type); color: var(--muted); }
+
+  /* Video prompt placeholder (real MOV drops in here) */
+  .media { position: relative; aspect-ratio: 1; border: 2px solid var(--rust); border-radius: 18px; background: var(--paper-2); margin: 0 0 22px; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: flex-end; padding: 20px; text-align: left; }
+  .media.short { aspect-ratio: 16 / 10; }
+  .media::before { content: '▶'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -70%); width: 64px; height: 64px; border-radius: 50%;
+    background: var(--rust); color: var(--paper); display: grid; place-items: center; font-size: 22px; padding-left: 4px; }
+  .media p { margin: 0; font: italic 14px/1.5 var(--type); color: var(--ink); }
+  .media small { position: absolute; top: 12px; left: 14px; font: 700 10px var(--type); letter-spacing: .12em; text-transform: uppercase; color: var(--rust); }
+
+  .btn { display: inline-block; background: var(--rust); color: var(--paper); border: 0; border-radius: 999px; padding: 15px 34px; cursor: pointer;
+    font: 800 19px/1 var(--display); font-variation-settings: 'SOFT' 100, 'WONK' 1; box-shadow: 0 4px 0 var(--rust-dark); transition: transform .08s, box-shadow .08s, background .15s; }
+  .btn:hover { background: #A32B0D; }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--rust-dark); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+  .btn.wide { width: 100%; }
+  .btn.small { width: 100%; padding: 7px 2px; font: 700 10px/1 var(--type); letter-spacing: .02em; box-shadow: none; background: transparent; color: var(--rust); border: 1.5px solid var(--rust); }
+  .btn.small.done { color: var(--muted); border-color: rgba(122, 90, 72, .45); }
+  .link { background: none; border: 0; padding: 6px 2px; color: var(--rust); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font: 700 13px var(--type); }
+  .link:disabled { opacity: .3; cursor: default; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+  footer { margin-top: auto; padding-top: 36px; font: 11px var(--type); letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+
+  /* Song grid */
+  .status { font: 13px var(--type); color: var(--muted); margin: 0 0 18px; }
+  .status b { color: var(--rust); }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 8px; margin-bottom: 26px; }
+  .tile { display: flex; flex-direction: column; gap: 6px; }
+  .tile .box { position: relative; aspect-ratio: 1; border-radius: 12px; border: 1.5px dashed rgba(181, 48, 15, .55); background: transparent; color: var(--rust); cursor: pointer;
+    display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 6px 4px; gap: 2px; transition: background .15s; }
+  .tile .box:hover { background: rgba(181, 48, 15, .06); }
+  .tile .no { font: 700 10px var(--type); opacity: .7; }
+  .tile .t { font: 800 10.5px/1.1 var(--display); font-variation-settings: 'SOFT' 100, 'opsz' 9; letter-spacing: -.01em; overflow-wrap: break-word; hyphens: auto; }
+  .tile.has .box { background: var(--rust); color: var(--paper); border-style: solid; border-color: var(--rust); }
+  .tile.has .box::after { content: '✓'; position: absolute; top: 4px; right: 6px; font: 700 11px var(--type); }
+
+  /* Song page */
+  .songno { font: italic 900 64px/1 var(--display); font-variation-settings: 'SOFT' 100, 'WONK' 1, 'opsz' 144; color: var(--rust); margin-top: 18px; }
+  #songTitle { display: block; font-size: 24px; margin: 4px 0 10px; }
+  #songPrompt { font: 15px/1.55 var(--type); white-space: pre-line; }
+  #songHint { margin: 14px 0 4px; }
+  #songStatus { font: 700 13px var(--type); color: var(--ok); min-height: 1.2em; }
+  .pager { display: flex; justify-content: space-between; align-items: center; font: 700 13px var(--type); color: var(--muted); margin-top: 22px; border-top: 1.5px dashed rgba(181, 48, 15, .4); padding-top: 12px; }
+  .progress { height: 8px; background: var(--paper-2); border-radius: 4px; overflow: hidden; margin: 14px 0 0; }
+  .progress div { height: 100%; background: var(--rust); width: 0; transition: width .2s; }
+
+  /* Consent dialog */
+  dialog { border: 2px solid var(--rust); border-radius: 20px; padding: 24px 20px 18px; max-width: 420px; width: calc(100% - 28px); max-height: calc(100dvh - 28px); background: var(--paper); color: var(--ink); }
+  dialog::backdrop { background: rgba(43, 26, 18, .6); }
+  dialog h3 { font-size: 28px; text-align: center; margin-bottom: 4px; }
   form { display: flex; flex-direction: column; gap: 12px; text-align: left; }
-  input[type=text], input[type=email] { padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; }
-  label.check { display: flex; gap: 8px; font-size: 13px; align-items: flex-start; }
-  .consent { max-height: 40vh; overflow: auto; background: #f7f7f7; padding: 12px; border-radius: 8px; font-size: 12px; line-height: 1.5; }
-  .consent ol { padding-left: 18px; }
-  .consent li { margin-bottom: 6px; }
-  label.check:has(input:disabled) { opacity: .5; }
-  .alt { border-top: 1px solid #eee; margin-top: 16px; padding-top: 12px; font-size: 14px; text-align: center; }
-  .err { color: #c92a2a; font-size: 13px; min-height: 1em; }
-  .mock { background: #fff3bf; font-size: 11px; padding: 4px; margin: -24px -20px 16px; }
+  input[type=text], input[type=email] { padding: 13px 14px; border: 1.5px solid #CDB89B; border-radius: 12px; font: 16px var(--display); background: var(--field); color: var(--ink); }
+  input[type=text]:focus, input[type=email]:focus { outline: none; border-color: var(--rust); box-shadow: 0 0 0 3px rgba(181, 48, 15, .15); }
+  input::placeholder { color: #A08876; }
+  label.check { display: flex; gap: 10px; font-size: 13px; line-height: 1.45; align-items: flex-start; }
+  label.check input { accent-color: var(--rust); width: 18px; height: 18px; flex: none; margin-top: 1px; }
+  label.check:has(input:disabled) { opacity: .45; }
+  .consent { max-height: 34vh; overflow: auto; background: var(--paper-2); padding: 14px; border-radius: 12px; font: 12px/1.6 var(--type); overscroll-behavior: contain; }
+  .consent p:first-child { font-family: var(--display); color: var(--rust); font-size: 13px; }
+  .consent ol { padding-left: 20px; }
+  .consent li { margin-bottom: 8px; }
+  .alt { border-top: 1.5px dashed rgba(181, 48, 15, .4); margin-top: 18px; padding-top: 12px; font-size: 14px; text-align: center; }
+  .err { color: var(--rust-dark); font: 700 13px var(--type); min-height: 1em; margin: 0; }
+  .mock { background: var(--ink); color: var(--paper); font: 11px var(--type); padding: 6px; margin: -28px -22px 16px; }
   [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
-<body>
+<body data-view="home">
 <main>
   <div class="mock" id="mockBanner" hidden>PREVIEW MODE — data tersimpan di browser ini saja, file tidak diunggah.</div>
-  <header><img src="LOGO/small.png" alt="Hindia"></header>
+  <header><img src="LOGO/small.png" alt="Hindia — 7th Menari Dengan Bayangan"></header>
 
   <!-- 1. Homescreen -->
   <section id="v-home">
-    <h1>PERAYAAN 7 TAHUN<br>ALBUM MENARI DENGAN BAYANGAN</h1>
-    <div class="media">(MOV) slideshow footage prompt video<br><br>
-      Terima kasih telah mendengarkan album MDB. Setelah 7 tahun rilis, apa makna yang kalian temukan dari album debut Hindia di tahun ini?</div>
-    <p>Tunjukkan momen menari dengan bayanganmu sendiri dan bagikan bersama kami</p>
+    <p class="kicker">Perayaan 7 tahun album debut Hindia</p>
+    <div class="media">
+      <small>Video</small>
+      <p>Terima kasih telah mendengarkan album Menari Dengan Bayangan. Setelah 7 tahun rilis, apa makna yang kalian temukan dari album debut Hindia di tahun ini?</p>
+    </div>
+    <p class="lede">Tunjukkan momen menari dengan bayanganmu sendiri dan bagikan bersama kami.</p>
     <p><button class="btn" id="startBtn">Rayakan di Sini</button></p>
   </section>
 
   <!-- 2C. Song grid -->
   <section id="v-grid" hidden>
-    <h1>Pilih lagu favoritmu dan unggah videomu</h1>
-    <p style="font-size:13px;margin-top:-12px">Halo, <b id="userName"></b> · <span id="count"></span>/12 terkirim · <button class="link" id="logoutBtn">Keluar</button></p>
+    <h1>Pilih lagu favoritmu, unggah videomu</h1>
+    <p class="status">Halo, <b id="userName"></b> · <b id="count"></b>/12 terkirim · <button class="link" id="logoutBtn">Keluar</button></p>
     <div class="grid" id="grid"></div>
-    <p><button class="btn" id="finishBtn">Finish Upload</button></p>
+    <p><button class="btn wide" id="finishBtn">Selesai Mengunggah</button></p>
   </section>
 
   <!-- 2C. Single song upload -->
   <section id="v-song" hidden>
-    <h1>PERAYAAN 7 TAHUN<br>ALBUM MENARI DENGAN BAYANGAN</h1>
-    <div class="media">(MOV) slideshow example video prompt</div>
-    <p><b id="songTitle"></b><br><span id="songPrompt" style="font-size:14px;white-space:pre-line"></span></p>
-    <p id="songHint" style="font-size:12px;color:#777"></p>
-    <p id="songStatus" style="font-size:13px;color:#2b8a3e"></p>
+    <div class="songno" id="songNo" aria-hidden="true"></div>
+    <h2 id="songTitle"></h2>
+    <p id="songPrompt"></p>
+    <div class="media short"><small>Contoh video</small></div>
+    <p class="note" id="songHint"></p>
+    <p id="songStatus"></p>
     <input type="file" id="fileInput" accept="video/*" hidden>
-    <p><button class="btn" id="uploadBtn"></button></p>
+    <p><button class="btn wide" id="uploadBtn"></button></p>
     <div class="progress" id="progress" hidden><div></div></div>
     <p class="err" id="uploadErr"></p>
     <div class="pager">
-      <button class="link" id="prevBtn">‹ Back</button>
+      <button class="link" id="prevBtn">‹ Sebelumnya</button>
       <span id="pageNum"></span>
-      <button class="link" id="nextBtn">Next ›</button>
+      <button class="link" id="nextBtn">Berikutnya ›</button>
     </div>
     <p><button class="link" id="toGridBtn">Lihat semua lagu</button></p>
   </section>
 
   <!-- Thank you -->
   <section id="v-done" hidden>
-    <h1>TERIMA KASIH!</h1>
-    <p>Kamu sudah mengirim <b id="doneCount"></b> dari 12 video. Kamu bisa kembali kapan saja untuk melanjutkan atau mengganti kirimanmu — cukup masuk dengan email yang sama.</p>
-    <p><button class="btn" id="backBtn">Kembali ke daftar lagu</button></p>
+    <h1 style="font-size:44px;margin-top:28px">Terima kasih!</h1>
+    <p class="lede">Kamu sudah mengirim <b id="doneCount"></b> dari 12 video.</p>
+    <p class="note">Kamu bisa kembali kapan saja untuk melanjutkan atau mengganti kirimanmu — cukup masuk dengan email yang sama.</p>
+    <p style="margin-top:24px"><button class="btn" id="backBtn">Kembali ke daftar lagu</button></p>
   </section>
 
-  <footer>Footer website as usual</footer>
+  <footer>Hindia · Sepuluh Dua Empat · 2026</footer>
 </main>
 
 <!-- 1A. Consent pop up (first visit) -->
 <dialog id="consent">
   <form id="regForm">
-    <h3 style="margin:0">Unggah Videomu</h3>
+    <h3>Unggah Videomu</h3>
     <input type="text" name="name" placeholder="Nama Lengkap" required maxlength="60" autocomplete="name">
     <input type="email" name="email" placeholder="Alamat Surel" required autocomplete="email">
     <div class="consent" id="consentText">
@@ -116,13 +181,13 @@
     <p id="scrollHint" style="font-size:12px;color:#777;margin:-4px 0 0">Gulir sampai bawah untuk menyetujui ↓</p>
     <label class="check" id="agreeLabel"><input type="checkbox" name="agree" required disabled> Saya telah membaca, memahami dan menyetujui seluruh syarat dan ketentuan di atas secara sadar dan tanpa paksaan dari pihak manapun untuk dapat dipergunakan sebagaimana mestinya</label>
     <p class="err" id="regErr"></p>
-    <button class="btn" type="submit">Unggah Videomu</button>
+    <button class="btn wide" type="submit">Unggah Videomu</button>
   </form>
   <div class="alt">Sudah pernah daftar? <button class="link" id="showLogin">Login</button></div>
   <form id="loginForm" hidden style="margin-top:12px">
     <input type="email" name="email" placeholder="Email yang sudah terdaftar" required autocomplete="email">
     <p class="err" id="loginErr"></p>
-    <button class="btn" type="submit">Login dengan Email</button>
+    <button class="btn wide" type="submit">Login dengan Email</button>
   </form>
 </dialog>
 

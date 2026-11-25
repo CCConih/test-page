@@ -70,6 +70,7 @@ function putFile(url, file, onProgress) {
 // ---------- Views ----------
 function show(view) {
   for (const v of ['home', 'grid', 'song', 'done']) $('v-' + v).hidden = v !== view;
+  document.body.dataset.view = view; // home shows the big logo, other screens a small one
   if (view === 'grid') renderGrid();
   if (view === 'song') renderSong();
   if (view === 'done') $('doneCount').textContent = Object.keys(user.subs).length;
@@ -84,8 +85,10 @@ function renderGrid() {
     const has = user.subs[i] != null;
     const tile = document.createElement('div');
     tile.className = 'tile' + (has ? ' has' : '');
-    tile.innerHTML = `<button class="box"></button><button class="btn small ${has ? 'done' : ''}">${has ? 'Ganti video?' : 'Submit Video'}</button>`;
-    tile.querySelector('.box').textContent = title;
+    tile.innerHTML = `<button class="box"><span class="no"></span><span class="t"></span></button><button class="btn small ${has ? 'done' : ''}">${has ? 'Ganti?' : 'Unggah'}</button>`;
+    tile.querySelector('.no').textContent = String(i + 1).padStart(2, '0');
+    tile.querySelector('.t').textContent = title.replace(/\s*\(ft\..*\)$/i, ''); // "ft." names don't fit a tile; full title is on the song page
+    tile.querySelector('.box').setAttribute('aria-label', `${i + 1}. ${title}${has ? ' (terkirim)' : ''}`);
     tile.querySelectorAll('button').forEach((b) => (b.onclick = () => { current = i; show('song'); }));
     $('grid').append(tile);
   });
@@ -94,7 +97,8 @@ function renderGrid() {
 function renderSong() {
   const [title, prompt] = SONGS[current];
   const n = String(current + 1).padStart(2, '0');
-  $('songTitle').textContent = `${n}. ${title}`;
+  $('songNo').textContent = n;
+  $('songTitle').textContent = title;
   $('songPrompt').textContent = prompt;
   $('pageNum').textContent = `${n}/12`;
   const sub = user.subs[current];
