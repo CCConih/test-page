@@ -126,4 +126,24 @@ const SIGNUP = { agreed: true, consentVersion: '2026-11-25' };
   assert.strictEqual(counts.rootCreates, 0);
 }
 
+// The consent statement exists twice: on the page (what people read) and in Code.gs (what gets saved as their record).
+// They must match word for word, and carry the same version.
+{
+  const { ctx } = load([], []);
+  const html = fs.readFileSync(__dirname + '/index.html', 'utf8');
+  const words = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+  const box = html.split('id="consentText"')[1];
+  const page = words(box.slice(box.indexOf('>') + 1, box.indexOf('</ol>')).replace(/<!--[\s\S]*?-->/g, '')) + ' ' +
+    words(html.split('id="agreeLabel"')[1].split('</label>')[0].replace(/^[^>]*>/, ''));
+  const server = words(vm.runInContext('CONSENT_TEXT', ctx)
+    .replace('{NAMA}', '—').replace('{EMAIL}', '—') // the page shows "—" until the user types
+    .replace(/^[a-g]\. /gm, '')                     // the page numbers a–g with <ol type="a">
+    .replace('[X] ', ''));
+  if (page !== server) {
+    const at = [...page].findIndex((c, k) => c !== server[k]);
+    assert.fail(`consent text differs at character ${at}:\n  page:    …${page.slice(Math.max(0, at - 40), at + 60)}…\n  Code.gs: …${server.slice(Math.max(0, at - 40), at + 60)}…`);
+  }
+  assert.strictEqual(html.match(/id="consentText" data-version="([^"]+)"/)[1], vm.runInContext('CONSENT_VERSION', ctx), 'consent version differs between index.html and Code.gs');
+}
+
 console.log('Code.gs: all tests passed');
