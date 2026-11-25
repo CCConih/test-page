@@ -64,7 +64,10 @@ function register(name, email, d) {
     f = existing || rememberFolder(email, root().createFolder(name.replace(/[\/\\]/g, '') + '_' + email));
   } finally { lock.releaseLock(); }
   saveConsent(f, name, email);
-  return existing ? login(email) : { name, subs: {} };
+  if (existing) return login(email);
+  const fresh = { name, subs: {} };
+  CacheService.getScriptCache().put('subs:' + email, JSON.stringify(fresh), 21600); // new user: nothing in Drive to read yet
+  return fresh;
 }
 
 // One record per time the user agrees; timestamp comes from Google's server, not the user's device.
@@ -109,7 +112,18 @@ g. Kontributor menjamin kebenaran seluruh data yang diisi dan menyatakan telah b
 
 [X] Saya telah membaca, memahami dan menyetujui seluruh syarat dan ketentuan di atas secara sadar dan tanpa paksaan dari pihak manapun untuk dapat dipergunakan sebagaimana mestinya`;
 
+// Each user's upload list is kept in the script cache, so a returning user skips Drive entirely.
+// shortcut: files changed by hand in Drive show up only when the entry expires (max 6 h); uploads made through the site update it at once.
 function login(email) {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('subs:' + email);
+  if (hit) return JSON.parse(hit);
+  const r = readSubsFromDrive(email);
+  cache.put('subs:' + email, JSON.stringify(r), 21600);
+  return r;
+}
+
+function readSubsFromDrive(email) {
   const f = userFolder(email);
   if (!f) throw new Error('Email belum terdaftar.');
   // Two Drive API calls (song folders, then all their files) instead of ~24 DriveApp calls, one pair per song.
@@ -174,7 +188,24 @@ function finishUpload(email, d) {
   while (all.hasNext()) files.push(all.next());
   files.sort((a, b) => b.getDateCreated() - a.getDateCreated());
   files.slice(1).forEach((x) => x.setTrashed(true));
-  return { kept: files[0] ? files[0].getName() : null };
+  const kept = files[0] ? files[0].getName() : null;
+  if (kept) updateCachedSubs(email, i, kept);
+  return { kept };
+}
+
+// Keeps the cached upload list (see login) in step with uploads made through the site.
+// Locked so two uploads finishing at the same moment can't overwrite each other's entry.
+function updateCachedSubs(email, i, fileName) {
+  const cache = CacheService.getScriptCache(), key = 'subs:' + email;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) { cache.remove(key); return; } // can't update safely: drop it, the next login reads Drive
+  try {
+    const hit = cache.get(key);
+    if (!hit) return; // nothing cached: the next login reads Drive, which already has the file
+    const r = JSON.parse(hit);
+    r.subs[i] = fileName;
+    cache.put(key, JSON.stringify(r), 21600);
+  } finally { lock.releaseLock(); }
 }
 
 const ROOT_NAME = 'MDB 7 Tahun - UGC Submissions';
