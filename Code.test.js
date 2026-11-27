@@ -9,8 +9,15 @@ function folder(id, name) {
     id, name, kids, files, getId: () => id, getName: () => name, isTrashed: () => false,
     getFoldersByName: (n) => iter(kids.filter((k) => k.name === n)),
     createFolder(n) { const k = folder(id + '/' + n, n); kids.push(k); byId[k.id] = k; return k; },
-    createFile(n, body) { files.push({ n, body }); },
+    // createFile(name, text, mime) for consent records, createFile(blob) for thumbnails
+    createFile(n, body) {
+      const blob = typeof n === 'object' ? n : null;
+      const f = { n: blob ? blob.name : n, body, trashed: false, getBlob: () => blob, setTrashed(t) { f.trashed = t; } };
+      files.push(f); return f;
+    },
     getFiles: () => iter([]),
+    getFilesByName: (n) => iter(files.filter((f) => f.n === n && !f.trashed)),
+    searchFiles: (q) => { const part = q.match(/title contains '([^']*)'/)[1]; return iter(files.filter((f) => f.n.includes(part) && !f.trashed)); },
   };
 }
 let byId;
@@ -28,7 +35,8 @@ function load(driveFolders, driveFiles, { knownUser = true } = {}) {
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => 'R' }) },
     DriveApp: { getFolderById: (id) => byId[id] },
     // sleep = time passing while another request works; a test can make that other request finish here
-    Utilities: { base64Encode: (b) => Buffer.from(b).toString('base64'), formatDate: () => '2026-11-25 10:00:00 WIB', getUuid: () => '0f8b5c1e-4a2d-4c3b-9e7f-112233445566',
+    Utilities: { base64Encode: (b) => Buffer.from(b).toString('base64'), base64Decode: (t) => [...Buffer.from(t, 'base64')],
+      newBlob: (bytes, type, name) => ({ name, type, getBytes: () => bytes }), formatDate: () => '2026-11-25 10:00:00 WIB', getUuid: () => '0f8b5c1e-4a2d-4c3b-9e7f-112233445566',
       sleep: () => { counts.sleeps++; const h = counts.whileWaiting; counts.whileWaiting = null; if (h) h(); } },
     MimeType: { PLAIN_TEXT: 'text/plain' },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (s) => ({ setMimeType: () => s }) },
@@ -276,6 +284,41 @@ for (const [why, google] of [
   assert.deepStrictEqual(post(ctx, { action: 'preview', session: s, song: 1 }), { image: null }, 'Drive has no thumbnail yet');
   assert.match(post(ctx, { action: 'preview', song: 1 }).error, /Sesi berakhir/, 'only for the signed-in owner');
   assert.match(post(ctx, { action: 'preview', session: s, song: 99 }).error, /Lagu tidak valid/);
+}
+
+// Own thumbnail saved by the page at upload time: stored next to the upload, shown first, tied to that exact file.
+{
+  const song = '02 - Besok Mungkin Kita Sampai';
+  const files = [];
+  const { ctx, cache } = load([], files);
+  const user = ctx.DriveApp.getFolderById('U');
+  const sf = user.createFolder(song);
+  const s = '0f8b5c1e-4a2d-4c3b-9e7f-112233445566'; cache.set('sess:' + s, 'budi@x.com');
+  const jpeg = 'data:image/jpeg;base64,' + Buffer.from([7, 7, 7]).toString('base64');
+  files.push({ name: 'clip.mp4', id: 'FILE_A_123456', parents: [sf.getId()], createdTime: '2026-11-27T09:00:00.000Z' }); // no Drive thumbnail yet
+  const fileFor = (id) => ({ id, parents: [sf.getId()] });
+  files[0] = { ...files[0], ...fileFor('FILE_A_123456') };
+
+  assert.deepStrictEqual(post(ctx, { action: 'savePreview', session: s, song: 1, fileId: 'FILE_A_123456', image: jpeg }), {});
+  assert.ok(user.files.some((f) => f.n === 'preview-02-FILE_A_123456.jpg' && !f.trashed), 'thumbnail stored in the person\'s folder');
+  cache.delete('thumb:budi@x.com:1');
+  assert.strictEqual(post(ctx, { action: 'preview', session: s, song: 1 }).image, jpeg, 'own thumbnail shown before Drive has one');
+
+  // Replaced video: the old thumbnail is not shown for the new file, and saving the new one trashes the old one.
+  files[0] = { name: 'clip2.mp4', id: 'FILE_B_654321', parents: [sf.getId()], createdTime: '2026-11-27T10:00:00.000Z' };
+  cache.delete('thumb:budi@x.com:1');
+  assert.deepStrictEqual(post(ctx, { action: 'preview', session: s, song: 1 }), { image: null }, 'old thumbnail never shown for a new upload');
+  post(ctx, { action: 'savePreview', session: s, song: 1, fileId: 'FILE_B_654321', image: jpeg });
+  assert.deepStrictEqual(user.files.filter((f) => f.n.startsWith('preview-02-') && !f.trashed).map((f) => f.n), ['preview-02-FILE_B_654321.jpg']);
+
+  // Only small JPEG data URLs for a plausible file id; only for the signed-in owner.
+  for (const [why, body] of [
+    ['not a JPEG', { image: 'data:image/png;base64,AAAA', fileId: 'FILE_B_654321' }],
+    ['script in place of an image', { image: 'javascript:alert(1)', fileId: 'FILE_B_654321' }],
+    ['too big', { image: 'data:image/jpeg;base64,' + 'A'.repeat(200001), fileId: 'FILE_B_654321' }],
+    ['bad file id', { image: jpeg, fileId: "x' or title contains '" }],
+  ]) assert.ok(post(ctx, { action: 'savePreview', session: s, song: 1, ...body }).error, why);
+  assert.match(post(ctx, { action: 'savePreview', song: 1, fileId: 'FILE_B_654321', image: jpeg }).error, /Sesi berakhir/);
 }
 
 console.log('Code.gs: all tests passed');

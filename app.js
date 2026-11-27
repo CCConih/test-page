@@ -70,9 +70,43 @@ function putFile(url, file, onProgress) {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress((e.loaded / e.total) * 100);
-    xhr.onload = () => (xhr.status < 300 ? ok() : fail(new Error('Upload gagal (' + xhr.status + ')')));
+    // Drive answers the finished upload with the new file's details; its id ties the thumbnail below to this exact file.
+    const id = () => { try { return JSON.parse(xhr.responseText).id || null; } catch { return null; } };
+    xhr.onload = () => (xhr.status < 300 ? ok(id()) : fail(new Error('Upload gagal (' + xhr.status + ')')));
     xhr.onerror = () => fail(new Error('Koneksi terputus, coba lagi.'));
     xhr.send(file);
+  });
+}
+
+// A small JPEG of the upload (a frame about 1 s in, for videos), saved next to it so later visits show the person's
+// own thumbnail straight away. Resolves null if this browser can't decode the file (e.g. an iPhone HEVC .mov on desktop);
+// then Drive's own thumbnail is used once it's ready.
+function posterFrom(file) {
+  return new Promise((ok) => {
+    const url = URL.createObjectURL(file);
+    let settled = false;
+    const done = (r) => { if (settled) return; settled = true; clearTimeout(timer); URL.revokeObjectURL(url); ok(r); };
+    const timer = setTimeout(() => done(null), 8000);
+    const draw = (el, w, h) => {
+      if (!w || !h) return done(null);
+      const s = Math.min(1, 480 / Math.max(w, h)), c = document.createElement('canvas');
+      c.width = Math.round(w * s); c.height = Math.round(h * s);
+      c.getContext('2d').drawImage(el, 0, 0, c.width, c.height);
+      done(c.toDataURL('image/jpeg', 0.7));
+    };
+    if (file.type.startsWith('image/')) {
+      const img = new Image();
+      img.onload = () => draw(img, img.naturalWidth, img.naturalHeight);
+      img.onerror = () => done(null);
+      img.src = url;
+      return;
+    }
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.onloadedmetadata = () => { v.currentTime = Math.min(1, (v.duration || 0) / 3); };
+    v.onseeked = () => draw(v, v.videoWidth, v.videoHeight);
+    v.onerror = () => done(null);
+    v.src = url;
   });
 }
 
@@ -114,7 +148,10 @@ function renderPreview(i) {
   const showVideo = (src, text, poster = '') => {
     v.poster = poster; v.src = src; v.hidden = false; box.classList.add('has-media'); label.textContent = text;
     v.onloadedmetadata = () => fit(v.videoWidth, v.videoHeight);
-    v.onerror = () => { v.hidden = true; box.classList.remove('has-media'); box.style.aspectRatio = ''; }; // missing/unplayable: show artwork
+    v.onerror = () => { // missing or unplayable here: show the upload's own thumbnail if we have one, else the artwork
+      v.hidden = true; box.classList.remove('has-media'); box.style.aspectRatio = '';
+      if (localPreviews[i]?.poster) showImage(localPreviews[i].poster, text);
+    };
   };
   const showImage = (src, text) => {
     img.src = src; img.hidden = false; box.classList.add('has-media'); label.textContent = text;
@@ -281,13 +318,19 @@ $('fileInput').onchange = async (e) => {
   const bar = $('progress').firstElementChild;
   try {
     const { uploadUrl } = await call('startUpload', { song, fileName: file.name, mimeType: file.type, size: file.size });
-    await putFile(uploadUrl, file, (p) => (bar.style.width = p + '%'));
+    const fileId = await putFile(uploadUrl, file, (p) => (bar.style.width = p + '%'));
     await call('finishUpload', { song }).catch(() => {}); // cleanup only; the new file is already saved
     if (!user) return; // signed out meanwhile (session ended): the file is saved in Drive and shows after signing in again
     user.subs[song] = file.name;
     if (localPreviews[song]) URL.revokeObjectURL(localPreviews[song].url);
     localPreviews[song] = { url: URL.createObjectURL(file), image: file.type.startsWith('image/') };
     if (current === song) renderSong();
+    // In the background: save a thumbnail of this upload for later visits (and use it here if the video can't play).
+    posterFrom(file).then((image) => {
+      if (!image) return;
+      if (localPreviews[song]) localPreviews[song].poster = image;
+      if (fileId) call('savePreview', { song, fileId, image }).catch(() => {});
+    });
   } catch (err) { $('uploadErr').textContent = err.message; }
   finally { $('uploadBtn').disabled = false; bar.style.width = 0; }
 };

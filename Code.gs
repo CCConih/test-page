@@ -31,6 +31,7 @@ function doPost(e) {
       else if (d.action === 'startUpload') out = startUpload(email, d);
       else if (d.action === 'finishUpload') out = finishUpload(email, d);
       else if (d.action === 'preview') out = preview(email, d);
+      else if (d.action === 'savePreview') out = savePreview(email, d);
       else if (d.action === 'logout') { CacheService.getScriptCache().remove('sess:' + d.session); out = {}; }
       else throw new Error('Unknown action');
     }
@@ -249,9 +250,30 @@ function finishUpload(email, d) {
 // finishes: if the finish call is lost under load, the list cleared at start still can't show the song as missing.
 function forgetSubs(email) { CacheService.getScriptCache().remove('subs:' + email); }
 
-// A still image of the person's own upload for one song, for the song page on later visits. Uses the thumbnail Drive
-// makes automatically, sent as a data URL: the file itself stays private (no public links, no Drive key in the browser).
-// Returns { image: null } while Drive is still making the thumbnail (usually a few minutes after an upload).
+// Thumbnails live in the person's folder (not the song folder, so finishUpload's "keep newest" never touches them),
+// named after the exact uploaded file they show: a thumbnail of a replaced video can never be shown for the new one.
+const posterPrefix = (i) => 'preview-' + String(i + 1).padStart(2, '0') + '-';
+
+// The page grabs a frame from the upload and sends it here right after the upload finishes.
+function savePreview(email, d) {
+  const i = Number(d.song);
+  if (!(i >= 0 && i < SONGS.length)) throw new Error('Lagu tidak valid.');
+  const fileId = String(d.fileId || ''), image = String(d.image || '');
+  if (!/^[\w-]{10,100}$/.test(fileId)) throw new Error('File tidak valid.');
+  const m = image.match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+  if (!m || image.length > 200000) throw new Error('Gambar tidak valid.'); // a 480 px JPEG is ~30-70 KB
+  const f = userFolder(email);
+  if (!f) throw new Error('Email belum terdaftar.');
+  const old = f.searchFiles(`title contains '${posterPrefix(i)}' and trashed = false`);
+  while (old.hasNext()) old.next().setTrashed(true); // only the newest upload's thumbnail is kept
+  f.createFile(Utilities.newBlob(Utilities.base64Decode(m[1]), 'image/jpeg', posterPrefix(i) + fileId + '.jpg'));
+  if (image.length < 95000) CacheService.getScriptCache().put('thumb:' + email + ':' + i, image, 21600);
+  return {};
+}
+
+// A still image of the person's own upload for one song, for the song page on later visits, sent as a data URL:
+// the file itself stays private (no public links, no Drive key in the browser). Prefers the thumbnail the page saved
+// at upload time (there immediately); otherwise Drive's own thumbnail, which takes a few minutes after an upload.
 function preview(email, d) {
   const i = Number(d.song);
   if (!(i >= 0 && i < SONGS.length)) throw new Error('Lagu tidak valid.');
@@ -264,7 +286,14 @@ function preview(email, d) {
   if (!it.hasNext()) return { image: null };
   const newest = driveList(`'${it.next().getId()}' in parents and trashed = false`, 'files(id,createdTime,thumbnailLink)')
     .sort((a, b) => (a.createdTime < b.createdTime ? 1 : -1))[0];
-  if (!newest || !newest.thumbnailLink) return { image: null };
+  if (!newest) return { image: null };
+  const saved = f.getFilesByName(posterPrefix(i) + newest.id + '.jpg');
+  if (saved.hasNext()) {
+    const image = 'data:image/jpeg;base64,' + Utilities.base64Encode(saved.next().getBlob().getBytes());
+    if (image.length < 95000) cache.put(key, image, 21600);
+    return { image };
+  }
+  if (!newest.thumbnailLink) return { image: null };
   const res = UrlFetchApp.fetch(newest.thumbnailLink.replace(/=s\d+$/, '=s480'), // Drive's default is 220 px; 480 is sharp on phones
     { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) return { image: null };
