@@ -16,15 +16,15 @@ function folder(id, name) {
 let byId;
 
 function load(driveFolders, driveFiles, { knownUser = true } = {}) {
-  const fetched = [], counts = { rootCreates: 0, sleeps: 0 };
+  const fetched = [], counts = { rootCreates: 0, sleeps: 0, puts: [], searches: [] };
   byId = {};
   const user = folder('U', 'Budi Santoso_budi@x.com'); byId.U = user;
   const root = folder('R', 'root'); byId.R = root;
   const rootCreate = root.createFolder; root.createFolder = (n) => { counts.rootCreates++; return rootCreate(n); };
-  root.searchFolders = () => iter([]); // Drive search lags: new folders never show up here in time
+  root.searchFolders = (q) => { counts.searches.push(q); return iter([]); }; // Drive search lags: new folders never show up here in time
   const cache = new Map(knownUser ? [['folder:budi@x.com', 'U']] : []);
   const ctx = {
-    CacheService: { getScriptCache: () => ({ get: (k) => cache.get(k) ?? null, put: (k, v) => cache.set(k, v), remove: (k) => cache.delete(k) }) },
+    CacheService: { getScriptCache: () => ({ get: (k) => cache.get(k) ?? null, put: (k, v) => { counts.puts.push(k); cache.set(k, v); }, remove: (k) => cache.delete(k) }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => 'R' }) },
     DriveApp: { getFolderById: (id) => byId[id] },
     // sleep = time passing while another request works; a test can make that other request finish here
@@ -35,8 +35,9 @@ function load(driveFolders, driveFiles, { knownUser = true } = {}) {
     ScriptApp: { getOAuthToken: () => 'token' },
     UrlFetchApp: { fetch: (url) => {
       if (url.includes('uploadType=resumable')) return { getHeaders: () => ({ Location: 'https://upload.example/session' }) };
-      // Google's tokeninfo: a test sets counts.google to what Google would say about the token ({ status, body })
-      if (url.includes('tokeninfo')) return { getResponseCode: () => counts.google.status, getContentText: () => JSON.stringify(counts.google.body) };
+      // Google's tokeninfo: a test sets counts.google to what Google would say ({ status, body }), or a list of answers in order
+      if (url.includes('tokeninfo')) { const g = Array.isArray(counts.google) ? counts.google.shift() : counts.google; counts.googleCalls = (counts.googleCalls || 0) + 1;
+        return { getResponseCode: () => g.status, getContentText: () => JSON.stringify(g.body) }; }
       const q = decodeURIComponent(url.split('&q=')[1]); fetched.push(q);
       const files = q.includes('mimeType') ? driveFolders : driveFiles.filter((f) => f.parents.some((p) => q.includes(`'${p}' in parents`)));
       return { getContentText: () => JSON.stringify({ files }) };
@@ -158,12 +159,42 @@ for (const [why, google] of [
   ['issued for another site', GOOD('budi@x.com', { aud: 'someone-else.apps.googleusercontent.com' })],
   ['not issued by Google', GOOD('budi@x.com', { iss: 'evil.example.com' })],
   ['email not confirmed', GOOD('budi@x.com', { email_verified: 'false' })],
-  ['email with a quote', GOOD("bu'di@x.com")],
+  ['email with a double quote', GOOD('bu"di@x.com')],
 ]) {
   const { ctx, cache, counts } = load([], []);
   counts.google = google;
   assert.match(post(ctx, { action: 'auth', idToken: 'tok' }).error, /Login Google gagal/, why);
   assert.ok(![...cache.keys()].some((k) => k.startsWith('sess:')), why + ': no session created');
+}
+
+// Google busy (429/5xx): asked once more; a real answer on the second try signs in, two busy answers say "busy", not "failed".
+{
+  const { ctx, counts } = load([], []);
+  counts.google = [{ status: 503, body: {} }, GOOD('budi@x.com')];
+  assert.strictEqual(post(ctx, { action: 'auth', idToken: 'tok' }).registered, true);
+  assert.strictEqual(counts.googleCalls, 2);
+  counts.google = [{ status: 429, body: {} }, { status: 500, body: {} }];
+  assert.match(post(ctx, { action: 'auth', idToken: 'tok' }).error, /Google sedang sibuk/);
+  counts.google = [{ status: 400, body: { error: 'invalid_token' } }]; counts.googleCalls = 0;
+  assert.match(post(ctx, { action: 'auth', idToken: 'tok' }).error, /Login Google gagal/);
+  assert.strictEqual(counts.googleCalls, 1, 'a bad token is not retried');
+}
+
+// Company emails with an apostrophe can sign in; the apostrophe is escaped inside the Drive search.
+{
+  const { ctx, counts } = load([], [], { knownUser: false });
+  counts.google = GOOD("o'brien@company.co.id");
+  const r = post(ctx, { action: 'auth', idToken: 'tok' });
+  assert.strictEqual(r.email, "o'brien@company.co.id"); assert.strictEqual(r.registered, false);
+  assert.ok(counts.searches.some((q) => q.includes("'_o\\'brien@company.co.id'")), 'apostrophe escaped in Drive search: ' + counts.searches);
+}
+
+// Sessions slide: every action pushes the 6-hour expiry forward, so active people don't time out mid-upload.
+{
+  const { ctx, cache, counts } = load([], []);
+  const s = '0f8b5c1e-4a2d-4c3b-9e7f-112233445566'; cache.set('sess:' + s, 'budi@x.com');
+  post(ctx, { action: 'login', session: s });
+  assert.ok(counts.puts.includes('sess:' + s), 'session re-saved on use');
 }
 
 // Every other action needs a valid session, and acts as the session's account even if the request names someone else.

@@ -170,7 +170,10 @@ function openPopup() {
 // The Google library loads in the background; draw its button when both it and the pop-up are ready.
 function renderGoogleButton() {
   if (IN_APP || !window.google?.accounts?.id || !$('consent').open) return;
-  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleSignIn, ux_mode: 'popup', context: 'signin' });
+  if (!renderGoogleButton.ready) { // Google expects initialize() once per page; later opens only redraw the button
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleSignIn, ux_mode: 'popup', context: 'signin' });
+    renderGoogleButton.ready = true;
+  }
   google.accounts.id.renderButton($('gBtn'), { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', width: 280, locale: 'id' });
 }
 window.onGoogleLibraryLoad = renderGoogleButton;
@@ -244,6 +247,7 @@ $('fileInput').onchange = async (e) => {
     const { uploadUrl } = await call('startUpload', { song, fileName: file.name, mimeType: file.type, size: file.size });
     await putFile(uploadUrl, file, (p) => (bar.style.width = p + '%'));
     await call('finishUpload', { song }).catch(() => {}); // cleanup only; the new file is already saved
+    if (!user) return; // signed out meanwhile (session ended): the file is saved in Drive and shows after signing in again
     user.subs[song] = file.name;
     if (current === song) renderSong();
   } catch (err) { $('uploadErr').textContent = err.message; }

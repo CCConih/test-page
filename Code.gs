@@ -44,12 +44,18 @@ function doPost(e) {
 function auth(idToken) {
   const fail = 'Login Google gagal. Coba lagi.';
   if (!idToken) throw new Error(fail);
-  const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken), { muteHttpExceptions: true });
+  const check = () => UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken), { muteHttpExceptions: true });
+  // Google may push back when busy (429) or hiccup (5xx): that's not a bad token, so ask once more before giving up.
+  const busy = (r) => r.getResponseCode() === 429 || r.getResponseCode() >= 500;
+  let res = check();
+  if (busy(res)) { Utilities.sleep(800 + Math.random() * 700); res = check(); }
+  if (busy(res)) throw new Error('Google sedang sibuk. Coba lagi sebentar lagi.');
   if (res.getResponseCode() !== 200) throw new Error(fail);
   const t = JSON.parse(res.getContentText());
   if (t.aud !== GOOGLE_CLIENT_ID || !/^(https:\/\/)?accounts\.google\.com$/.test(t.iss) || String(t.email_verified) !== 'true') throw new Error(fail);
   const email = String(t.email || '').trim().toLowerCase();
-  if (!/^[^\s@'"\\]+@[^\s@'"\\]+\.[^\s@'"\\]+$/.test(email)) throw new Error(fail); // also keeps quotes out of Drive queries
+  // Apostrophes are allowed (some company addresses have them, e.g. o'brien@…); userFolder() escapes them for Drive search.
+  if (!/^[^\s@"\\]+@[^\s@"\\]+\.[^\s@"\\]+$/.test(email)) throw new Error(fail);
   const session = Utilities.getUuid(); // random, unguessable
   CacheService.getScriptCache().put('sess:' + session, email, SESSION_SECONDS);
   // Known user: signed straight in. New user: the page asks for their name and consent, then calls register.
@@ -57,8 +63,10 @@ function auth(idToken) {
 }
 
 function sessionEmail(session) {
-  const email = /^[0-9a-f-]{36}$/.test(String(session)) && CacheService.getScriptCache().get('sess:' + session);
+  const cache = CacheService.getScriptCache();
+  const email = /^[0-9a-f-]{36}$/.test(String(session)) && cache.get('sess:' + session);
   if (!email) throw new Error('Sesi berakhir. Silakan masuk lagi.');
+  cache.put('sess:' + session, email, SESSION_SECONDS); // sliding: 6 h from the LAST action, so active people never time out mid-upload
   return email;
 }
 
@@ -67,8 +75,8 @@ function sessionEmail(session) {
 function userFolder(email) {
   const cached = cachedFolder(email);
   if (cached) return cached;
-  // Email is validated above (no quotes), so it's safe inside the query string.
-  const it = root().searchFolders(`title contains '_${email}' and trashed = false`);
+  // Email comes from Google (no " or \, checked in auth); escape apostrophes so they can't end the quoted Drive search term.
+  const it = root().searchFolders(`title contains '_${email.replace(/'/g, "\\'")}' and trashed = false`);
   while (it.hasNext()) { const f = it.next(); if (f.getName().endsWith('_' + email)) return rememberFolder(email, f); }
   return null;
 }
