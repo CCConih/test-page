@@ -1,4 +1,4 @@
-// Run: node Code.test.js — checks Code.gs against a fake Google Drive and cache (no Google account needed).
+// Run: node Code.test.js — checks Code.gs (and the public site in site/) against a fake Google Drive and cache.
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
 
 const iter = (arr) => { let i = 0; return { hasNext: () => i < arr.length, next: () => arr[i++] }; };
@@ -41,8 +41,8 @@ function load(driveFolders, driveFiles, { knownUser = true } = {}) {
     MimeType: { PLAIN_TEXT: 'text/plain' },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (s) => ({ setMimeType: () => s }) },
     ScriptApp: { getOAuthToken: () => 'token' },
-    UrlFetchApp: { fetch: (url) => {
-      if (url.includes('uploadType=resumable')) return { getHeaders: () => ({ Location: 'https://upload.example/session' }) };
+    UrlFetchApp: { fetch: (url, opts = {}) => {
+      if (url.includes('uploadType=resumable')) { counts.uploadOrigin = opts.headers.Origin; return { getHeaders: () => ({ Location: 'https://upload.example/session' }) }; }
       // Google's tokeninfo: a test sets counts.google to what Google would say ({ status, body }), or a list of answers in order
       if (url.startsWith('https://thumbs.example/')) { counts.thumbFetches = (counts.thumbFetches || 0) + 1;
         return { getResponseCode: () => 200, getBlob: () => ({ getContentType: () => 'image/jpeg', getBytes: () => (url.includes('/new') ? [1, 2, 3] : [9, 9, 9]) }) }; } // each file's thumbnail looks different
@@ -88,7 +88,7 @@ const SIGNUP = { agreed: true, consentVersion: '2026-11-25' };
   const { ctx, login, cache, fetched } = load(FOLDERS, FILES);
   login('budi@x.com'); login('budi@x.com');
   assert.strictEqual(fetched.length, 2, 'second login served from cache');
-  ctx.startUpload('budi@x.com', { song: 5, mimeType: 'video/mp4', size: 10, fileName: 'a.mp4' });
+  ctx.startUpload('budi@x.com', { song: 5, mimeType: 'video/mp4', size: 10, fileName: 'a.mp4', origin: 'https://mdb.hindia1024.com' });
   assert.ok(!cache.has('subs:budi@x.com'), 'startUpload clears the list');
   login('budi@x.com'); // e.g. a page reload while the video is still uploading
   ctx.finishUpload('budi@x.com', { song: 5 });
@@ -229,7 +229,7 @@ for (const [why, google] of [
 // They must match word for word, and carry the same version.
 {
   const { ctx } = load([], []);
-  const html = fs.readFileSync(__dirname + '/index.html', 'utf8');
+  const html = fs.readFileSync(__dirname + '/site/index.html', 'utf8');
   const words = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
   const box = html.split('id="consentText"')[1];
   const page = words(box.slice(box.indexOf('>') + 1, box.indexOf('</ol>')).replace(/<!--[\s\S]*?-->/g, '')) + ' ' +
@@ -249,7 +249,7 @@ for (const [why, google] of [
 // SONGS in app.js (titles/prompts/upload type), SONGS + IMAGE_SONG in Code.gs (Drive folders), assets/thumbs/NN.jpg (card art).
 {
   const { ctx } = load([], []);
-  const appSrc = fs.readFileSync(__dirname + '/app.js', 'utf8');
+  const appSrc = fs.readFileSync(__dirname + '/site/app.js', 'utf8');
   const literal = appSrc.slice(appSrc.indexOf('const SONGS = [') + 'const SONGS = '.length, appSrc.indexOf('];', appSrc.indexOf('const SONGS = [')) + 1);
   const page = JSON.parse(JSON.stringify(vm.runInNewContext('(' + literal + ')'))); // copy out of the sandbox
   const server = JSON.parse(JSON.stringify(vm.runInContext('SONGS', ctx)));
@@ -259,8 +259,8 @@ for (const [why, google] of [
   page.forEach(([title], i) => assert.strictEqual(key(title), key(server[i]), `song ${i + 1}: app.js "${title}" vs Code.gs "${server[i]}"`));
   const imageSongs = page.map((s, i) => (s[2] === 'image' ? i : -1)).filter((i) => i >= 0);
   assert.deepStrictEqual(imageSongs, [vm.runInContext('IMAGE_SONG', ctx)], 'the image-upload song differs between app.js and Code.gs IMAGE_SONG');
-  page.forEach((_, i) => assert.ok(fs.existsSync(`${__dirname}/assets/thumbs/${String(i + 1).padStart(2, '0')}.jpg`), `missing thumbnail for song ${i + 1}`));
-  assert.ok(!fs.existsSync(`${__dirname}/assets/thumbs/${String(page.length + 1).padStart(2, '0')}.jpg`), 'more thumbnails than songs');
+  page.forEach((_, i) => assert.ok(fs.existsSync(`${__dirname}/site/assets/thumbs/${String(i + 1).padStart(2, '0')}.jpg`), `missing thumbnail for song ${i + 1}`));
+  assert.ok(!fs.existsSync(`${__dirname}/site/assets/thumbs/${String(page.length + 1).padStart(2, '0')}.jpg`), 'more thumbnails than songs');
 }
 
 // Preview still of the person's own upload: newest file's Drive thumbnail, as a data URL; cached; cleared by a new upload.
@@ -277,7 +277,7 @@ for (const [why, google] of [
   assert.strictEqual(counts.thumbFetches, 1);
   post(ctx, { action: 'preview', session: s, song: 1 });
   assert.strictEqual(counts.thumbFetches, 1, 'second view served from cache');
-  post(ctx, { action: 'startUpload', session: s, song: 1, fileName: 'x.mp4', mimeType: 'video/mp4', size: 10 });
+  post(ctx, { action: 'startUpload', session: s, song: 1, fileName: 'x.mp4', mimeType: 'video/mp4', size: 10, origin: 'https://mdb.hindia1024.com' });
   assert.ok(!cache.has('thumb:budi@x.com:1'), 'new upload clears the old preview');
   assert.deepStrictEqual(post(ctx, { action: 'preview', session: s, song: 3 }), { image: null }, 'no folder for that song yet');
   files.forEach((f) => delete f.thumbnailLink); cache.delete('thumb:budi@x.com:1');
@@ -319,6 +319,17 @@ for (const [why, google] of [
     ['bad file id', { image: jpeg, fileId: "x' or title contains '" }],
   ]) assert.ok(post(ctx, { action: 'savePreview', session: s, song: 1, ...body }).error, why);
   assert.match(post(ctx, { action: 'savePreview', song: 1, fileId: 'FILE_B_654321', image: jpeg }).error, /Sesi berakhir/);
+}
+
+// Uploads are set up only for the site's own addresses; Drive is told exactly that address.
+{
+  const { ctx, cache, counts } = load([], []);
+  const s = '0f8b5c1e-4a2d-4c3b-9e7f-112233445566'; cache.set('sess:' + s, 'budi@x.com');
+  const up = (origin) => post(ctx, { action: 'startUpload', session: s, song: 1, fileName: 'x.mp4', mimeType: 'video/mp4', size: 10, origin });
+  assert.strictEqual(up('https://mdb.hindia1024.com').uploadUrl, 'https://upload.example/session');
+  assert.strictEqual(counts.uploadOrigin, 'https://mdb.hindia1024.com');
+  for (const bad of ['https://evil.example', 'https://mdb.hindia1024.com.evil.example', undefined, ''])
+    assert.match(up(bad).error, /Muat ulang/, `origin ${bad} refused`);
 }
 
 console.log('Code.gs: all tests passed');

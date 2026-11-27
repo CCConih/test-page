@@ -336,7 +336,7 @@ $('fileInput').onchange = async (e) => {
   $('uploadBtn').disabled = true; $('uploadErr').textContent = ''; $('progress').hidden = false;
   const bar = $('progress').firstElementChild;
   try {
-    const { uploadUrl } = await call('startUpload', { song, fileName: file.name, mimeType: file.type, size: file.size });
+    const { uploadUrl } = await call('startUpload', { song, fileName: file.name, mimeType: file.type, size: file.size, origin: location.origin });
     const fileId = await putFile(uploadUrl, file, (p) => (bar.style.width = p + '%'));
     await call('finishUpload', { song }).catch(() => {}); // cleanup only; the new file is already saved
     if (!user) return; // signed out meanwhile (session ended): the file is saved in Drive and shows after signing in again

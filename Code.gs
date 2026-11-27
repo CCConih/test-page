@@ -7,7 +7,14 @@
  * Drive layout:  ROOT / <Name>_<email> / <NN - Song> / <uploaded files>
  * The video goes browser -> Drive directly (resumable upload), so Apps Script's 50 MB limit doesn't apply.
  */
-const ALLOWED_ORIGIN = 'https://ccconih.github.io'; // test page; change to the real domain at launch // must match the site's origin exactly, or the browser upload is blocked by CORS
+// Site addresses allowed to upload. Drive only accepts the upload from the exact address named when it's set up, so the
+// page says where it is and it must be one of these. Remove the test addresses at launch.
+const ALLOWED_ORIGINS = [
+  'https://mdb.hindia1024.com',      // live site (Cloudflare Pages, custom domain)
+  'https://mdb-hindia1024.pages.dev', // Cloudflare Pages' own address for the same site
+  'https://ccconih.github.io',        // old GitHub Pages test page
+  'http://localhost:8080',            // local testing
+];
 // Drive folder names; keep in the same order as SONGS in app.js.
 const SONGS = ['Evakuasi', 'Besok Mungkin Kita Sampai', 'Jam Makan Siang', 'Dehidrasi', 'Untuk Apa - Untuk Apa', 'Secukupnya',
   'Belum Tidur', 'Apapun yang Terjadi', 'Membasuh', 'Rumah ke Rumah', 'Mata Air', 'Evaluasi'];
@@ -16,7 +23,7 @@ const MAX_BYTES =500 * 1024 * 1024;
 // OAuth "Web application" client ID from Google Cloud Console; must be the same value as GOOGLE_CLIENT_ID in app.js.
 const GOOGLE_CLIENT_ID = '593857897186-p3hjif0elcd9ouk2u5j62kmf4rnl2m3p.apps.googleusercontent.com';
 // Change on every edit. After redeploying, the "version" action must answer this, or the old code is still live.
-const BACKEND_VERSION = '2026-11-27 thumbnails';
+const BACKEND_VERSION = '2026-11-28 cloudflare';
 const SESSION_SECONDS = 21600; // 6 h, the script cache maximum; after that people tap "Masuk dengan Google" again
 
 function doPost(e) {
@@ -210,6 +217,7 @@ function startUpload(email, d) {
   const kind = i === IMAGE_SONG ? 'image' : 'video';
   if (!String(d.mimeType).startsWith(kind + '/')) throw new Error(kind === 'image' ? 'File harus berupa gambar.' : 'File harus berupa video.');
   if (!(d.size > 0 && d.size <= MAX_BYTES)) throw new Error('Ukuran file tidak valid.');
+  if (!ALLOWED_ORIGINS.includes(d.origin)) throw new Error('Halaman sudah diperbarui. Muat ulang halaman, lalu coba lagi.'); // old page, or another site
   const f = userFolder(email);
   if (!f) throw new Error('Email belum terdaftar.');
   const it = f.getFoldersByName(songFolderName(i));
@@ -224,7 +232,7 @@ function startUpload(email, d) {
       Authorization: 'Bearer ' + ScriptApp.getOAuthToken(),
       'X-Upload-Content-Type': d.mimeType,
       'X-Upload-Content-Length': String(d.size),
-      Origin: ALLOWED_ORIGIN,
+      Origin: d.origin, // checked against ALLOWED_ORIGINS above
     },
     payload: JSON.stringify({ name: String(d.fileName || 'upload').slice(0, 200), parents: [sf.getId()] }),
   });

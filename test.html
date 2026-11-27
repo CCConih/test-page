@@ -1,9 +1,9 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Tests — call() retry</title>
-<!-- Open over http (e.g. the test page URL + /test.html). Loads the real page in a hidden frame and fakes its network. -->
+<!-- Open over http from the project folder (e.g. http://localhost:8080/test.html; it is not published). Loads the real page in a hidden frame and fakes its network. -->
 <pre id="out">Running…</pre>
-<iframe id="app" src="index.html" hidden></iframe>
+<iframe id="app" src="site/index.html" hidden></iframe>
 <script>
 const out = document.getElementById('out');
 document.getElementById('app').onload = async (e) => {
