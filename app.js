@@ -137,6 +137,17 @@ const thumb = (i) => `url('assets/thumbs/${nn(i)}.jpg')`; // song artwork, same 
 //   2. a still of what they uploaded earlier (Drive's thumbnail, fetched by the backend);
 //   3. the song's example video, assets/examples/NN.mp4 (falls back to the song artwork until that file exists).
 const localPreviews = {}; // song index -> { url, image } for files uploaded this visit
+
+// Thumbnails kept in this browser, so song pages show them instantly on later visits instead of asking the backend.
+// Stored per account and tied to the uploaded file's name, so a replaced upload never shows the old picture.
+// shortcut: replacing a video with one of the SAME file name from another device shows the old thumbnail here
+// until this browser's copy is cleared (sign-out); compare Drive file ids instead if that ever matters.
+const thumbKey = () => 'mdb_thumbs:' + user.email;
+const savedThumbs = () => { try { return JSON.parse(localStorage.getItem(thumbKey())) || {}; } catch { return {}; } };
+function saveThumb(i, file, image) {
+  const all = savedThumbs(); all[i] = { file, image };
+  try { localStorage.setItem(thumbKey(), JSON.stringify(all)); } catch { /* storage full: just fetch next time */ }
+}
 function renderPreview(i) {
   const box = $('songMedia'), v = $('songVideo'), img = $('songImage'), label = $('songMediaLabel');
   const isImage = SONGS[i][2] === 'image', mine = isImage ? 'Gambarmu' : 'Videomu';
@@ -161,8 +172,13 @@ function renderPreview(i) {
   if (local) return local.image ? showImage(local.url, mine) : showVideo(local.url, mine);
   if (user?.subs[i] != null) {
     label.textContent = `${mine} terkirim ✓`;
+    const kept = savedThumbs()[i];
+    if (kept?.file === user.subs[i]) return showImage(kept.image, `${mine} ✓`); // instant, no backend call
+    const file = user.subs[i];
     call('preview', { song: i }).then(({ image }) => {
-      if (image && current === i && !localPreviews[i] && !$('v-song').hidden) showImage(image, `${mine} ✓`);
+      if (!image || !user) return;
+      saveThumb(i, file, image);
+      if (current === i && !localPreviews[i] && !$('v-song').hidden) showImage(image, `${mine} ✓`);
     }).catch(() => {}); // no still yet (Drive still processing) or offline: the artwork stays
     return;
   }
@@ -215,6 +231,9 @@ function login(data) {
 
 // Forget the signed-in user on this device; `expired` = the server's 6-hour session ran out, so offer sign-in again.
 function signOut(expired) {
+  // Tapping "Keluar" also removes their thumbnails, so nothing of theirs stays on a shared device.
+  // A session that merely ran out keeps them: it's the same person, about to sign straight back in.
+  if (user && !expired) localStorage.removeItem(thumbKey());
   user = null; pending = null;
   for (const k in localPreviews) { URL.revokeObjectURL(localPreviews[k].url); delete localPreviews[k]; } // next person on this device
   localStorage.removeItem('mdb_session');
@@ -329,6 +348,7 @@ $('fileInput').onchange = async (e) => {
     posterFrom(file).then((image) => {
       if (!image) return;
       if (localPreviews[song]) localPreviews[song].poster = image;
+      if (user) saveThumb(song, file.name, image);
       if (fileId) call('savePreview', { song, fileId, image }).catch(() => {});
     });
   } catch (err) { $('uploadErr').textContent = err.message; }
