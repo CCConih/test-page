@@ -204,4 +204,22 @@ for (const [why, google] of [
   assert.strictEqual(html.match(/id="consentText" data-version="([^"]+)"/)[1], vm.runInContext('CONSENT_VERSION', ctx), 'consent version differs between index.html and Code.gs');
 }
 
+// The song list exists in several places that must stay in the same order, or uploads land in the wrong song's folder:
+// SONGS in app.js (titles/prompts/upload type), SONGS + IMAGE_SONG in Code.gs (Drive folders), assets/thumbs/NN.jpg (card art).
+{
+  const { ctx } = load([], []);
+  const appSrc = fs.readFileSync(__dirname + '/app.js', 'utf8');
+  const literal = appSrc.slice(appSrc.indexOf('const SONGS = [') + 'const SONGS = '.length, appSrc.indexOf('];', appSrc.indexOf('const SONGS = [')) + 1);
+  const page = JSON.parse(JSON.stringify(vm.runInNewContext('(' + literal + ')'))); // copy out of the sandbox
+  const server = JSON.parse(JSON.stringify(vm.runInContext('SONGS', ctx)));
+  // Same song, different spelling is fine: the page adds "(ft. …)" and uses "/" and "?", which Drive folder names avoid.
+  const key = (s) => s.replace(/\(ft\..*?\)/i, '').replace(/[\/?\-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  assert.strictEqual(page.length, server.length, `app.js has ${page.length} songs, Code.gs has ${server.length}`);
+  page.forEach(([title], i) => assert.strictEqual(key(title), key(server[i]), `song ${i + 1}: app.js "${title}" vs Code.gs "${server[i]}"`));
+  const imageSongs = page.map((s, i) => (s[2] === 'image' ? i : -1)).filter((i) => i >= 0);
+  assert.deepStrictEqual(imageSongs, [vm.runInContext('IMAGE_SONG', ctx)], 'the image-upload song differs between app.js and Code.gs IMAGE_SONG');
+  page.forEach((_, i) => assert.ok(fs.existsSync(`${__dirname}/assets/thumbs/${String(i + 1).padStart(2, '0')}.jpg`), `missing thumbnail for song ${i + 1}`));
+  assert.ok(!fs.existsSync(`${__dirname}/assets/thumbs/${String(page.length + 1).padStart(2, '0')}.jpg`), 'more thumbnails than songs');
+}
+
 console.log('Code.gs: all tests passed');
