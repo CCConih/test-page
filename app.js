@@ -95,7 +95,42 @@ function show(view) {
   });
 }
 
-const thumb = (i) => `url('assets/thumbs/${String(i + 1).padStart(2, '0')}.jpg')`; // song artwork, same order as SONGS
+const nn = (i) => String(i + 1).padStart(2, '0');
+const thumb = (i) => `url('assets/thumbs/${nn(i)}.jpg')`; // song artwork, same order as SONGS
+
+// Song page preview box, in order of preference:
+//   1. the file this person uploaded during this visit, played straight from their phone (no download);
+//   2. a still of what they uploaded earlier (Drive's thumbnail, fetched by the backend);
+//   3. the song's example video, assets/examples/NN.mp4 (falls back to the song artwork until that file exists).
+const localPreviews = {}; // song index -> { url, image } for files uploaded this visit
+function renderPreview(i) {
+  const box = $('songMedia'), v = $('songVideo'), img = $('songImage'), label = $('songMediaLabel');
+  const isImage = SONGS[i][2] === 'image', mine = isImage ? 'Gambarmu' : 'Videomu';
+  v.onerror = v.onloadedmetadata = img.onload = null; // handlers from the previous song must not fire on this one
+  v.pause(); v.removeAttribute('src'); v.load(); v.hidden = img.hidden = true;
+  box.classList.remove('has-media'); box.style.aspectRatio = '';
+  box.style.backgroundImage = `linear-gradient(rgba(10, 8, 7, .1), rgba(10, 8, 7, .5)), ${thumb(i)}`;
+  const fit = (w, h) => w && h && (box.style.aspectRatio = `${w} / ${h}`); // vertical phone videos stay tall
+  const showVideo = (src, text, poster = '') => {
+    v.poster = poster; v.src = src; v.hidden = false; box.classList.add('has-media'); label.textContent = text;
+    v.onloadedmetadata = () => fit(v.videoWidth, v.videoHeight);
+    v.onerror = () => { v.hidden = true; box.classList.remove('has-media'); box.style.aspectRatio = ''; }; // missing/unplayable: show artwork
+  };
+  const showImage = (src, text) => {
+    img.src = src; img.hidden = false; box.classList.add('has-media'); label.textContent = text;
+    img.onload = () => fit(img.naturalWidth, img.naturalHeight);
+  };
+  const local = localPreviews[i];
+  if (local) return local.image ? showImage(local.url, mine) : showVideo(local.url, mine);
+  if (user?.subs[i] != null) {
+    label.textContent = `${mine} terkirim ✓`;
+    call('preview', { song: i }).then(({ image }) => {
+      if (image && current === i && !localPreviews[i] && !$('v-song').hidden) showImage(image, `${mine} ✓`);
+    }).catch(() => {}); // no still yet (Drive still processing) or offline: the artwork stays
+    return;
+  }
+  showVideo(`assets/examples/${nn(i)}.mp4`, 'Contoh video', `assets/thumbs/${nn(i)}.jpg`);
+}
 
 function renderGrid() {
   $('userName').textContent = user.name;
@@ -119,7 +154,7 @@ function renderSong() {
   const [title, prompt] = SONGS[current];
   const n = String(current + 1).padStart(2, '0');
   $('songNo').textContent = n;
-  $('songMedia').style.backgroundImage = `linear-gradient(rgba(10, 8, 7, .1), rgba(10, 8, 7, .5)), ${thumb(current)}`;
+  renderPreview(current);
   $('songTitle').textContent = title;
   $('songPrompt').textContent = prompt;
   $('pageNum').textContent = `${n}/12`;
@@ -144,6 +179,7 @@ function login(data) {
 // Forget the signed-in user on this device; `expired` = the server's 6-hour session ran out, so offer sign-in again.
 function signOut(expired) {
   user = null; pending = null;
+  for (const k in localPreviews) { URL.revokeObjectURL(localPreviews[k].url); delete localPreviews[k]; } // next person on this device
   localStorage.removeItem('mdb_session');
   window.google?.accounts?.id?.disableAutoSelect();
   show('home');
@@ -249,6 +285,8 @@ $('fileInput').onchange = async (e) => {
     await call('finishUpload', { song }).catch(() => {}); // cleanup only; the new file is already saved
     if (!user) return; // signed out meanwhile (session ended): the file is saved in Drive and shows after signing in again
     user.subs[song] = file.name;
+    if (localPreviews[song]) URL.revokeObjectURL(localPreviews[song].url);
+    localPreviews[song] = { url: URL.createObjectURL(file), image: file.type.startsWith('image/') };
     if (current === song) renderSong();
   } catch (err) { $('uploadErr').textContent = err.message; }
   finally { $('uploadBtn').disabled = false; bar.style.width = 0; }

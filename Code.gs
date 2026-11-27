@@ -30,6 +30,7 @@ function doPost(e) {
       else if (d.action === 'login') out = login(email);
       else if (d.action === 'startUpload') out = startUpload(email, d);
       else if (d.action === 'finishUpload') out = finishUpload(email, d);
+      else if (d.action === 'preview') out = preview(email, d);
       else if (d.action === 'logout') { CacheService.getScriptCache().remove('sess:' + d.session); out = {}; }
       else throw new Error('Unknown action');
     }
@@ -210,6 +211,7 @@ function startUpload(email, d) {
   const it = f.getFoldersByName(songFolderName(i));
   const sf = it.hasNext() ? it.next() : f.createFolder(songFolderName(i));
   forgetSubs(email);
+  CacheService.getScriptCache().remove('thumb:' + email + ':' + i); // the old preview image no longer matches
   // Old file is removed only in finishUpload, after the new one has fully arrived, so a failed re-upload never loses it.
   const res = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
     method: 'post',
@@ -246,6 +248,31 @@ function finishUpload(email, d) {
 // Drops the cached upload list (see login) so the next login reads Drive. Called when an upload starts AND when it
 // finishes: if the finish call is lost under load, the list cleared at start still can't show the song as missing.
 function forgetSubs(email) { CacheService.getScriptCache().remove('subs:' + email); }
+
+// A still image of the person's own upload for one song, for the song page on later visits. Uses the thumbnail Drive
+// makes automatically, sent as a data URL: the file itself stays private (no public links, no Drive key in the browser).
+// Returns { image: null } while Drive is still making the thumbnail (usually a few minutes after an upload).
+function preview(email, d) {
+  const i = Number(d.song);
+  if (!(i >= 0 && i < SONGS.length)) throw new Error('Lagu tidak valid.');
+  const cache = CacheService.getScriptCache(), key = 'thumb:' + email + ':' + i;
+  const hit = cache.get(key);
+  if (hit) return { image: hit };
+  const f = userFolder(email);
+  if (!f) throw new Error('Email belum terdaftar.');
+  const it = f.getFoldersByName(songFolderName(i));
+  if (!it.hasNext()) return { image: null };
+  const newest = driveList(`'${it.next().getId()}' in parents and trashed = false`, 'files(id,createdTime,thumbnailLink)')
+    .sort((a, b) => (a.createdTime < b.createdTime ? 1 : -1))[0];
+  if (!newest || !newest.thumbnailLink) return { image: null };
+  const res = UrlFetchApp.fetch(newest.thumbnailLink.replace(/=s\d+$/, '=s480'), // Drive's default is 220 px; 480 is sharp on phones
+    { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return { image: null };
+  const blob = res.getBlob();
+  const image = 'data:' + (blob.getContentType() || 'image/jpeg') + ';base64,' + Utilities.base64Encode(blob.getBytes());
+  if (image.length < 95000) cache.put(key, image, 21600); // cache values are capped at 100 KB
+  return { image };
+}
 
 const ROOT_NAME = 'MDB 7 Tahun - UGC Submissions';
 

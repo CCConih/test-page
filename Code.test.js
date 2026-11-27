@@ -28,7 +28,7 @@ function load(driveFolders, driveFiles, { knownUser = true } = {}) {
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => 'R' }) },
     DriveApp: { getFolderById: (id) => byId[id] },
     // sleep = time passing while another request works; a test can make that other request finish here
-    Utilities: { formatDate: () => '2026-11-25 10:00:00 WIB', getUuid: () => '0f8b5c1e-4a2d-4c3b-9e7f-112233445566',
+    Utilities: { base64Encode: (b) => Buffer.from(b).toString('base64'), formatDate: () => '2026-11-25 10:00:00 WIB', getUuid: () => '0f8b5c1e-4a2d-4c3b-9e7f-112233445566',
       sleep: () => { counts.sleeps++; const h = counts.whileWaiting; counts.whileWaiting = null; if (h) h(); } },
     MimeType: { PLAIN_TEXT: 'text/plain' },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (s) => ({ setMimeType: () => s }) },
@@ -36,6 +36,8 @@ function load(driveFolders, driveFiles, { knownUser = true } = {}) {
     UrlFetchApp: { fetch: (url) => {
       if (url.includes('uploadType=resumable')) return { getHeaders: () => ({ Location: 'https://upload.example/session' }) };
       // Google's tokeninfo: a test sets counts.google to what Google would say ({ status, body }), or a list of answers in order
+      if (url.startsWith('https://thumbs.example/')) { counts.thumbFetches = (counts.thumbFetches || 0) + 1;
+        return { getResponseCode: () => 200, getBlob: () => ({ getContentType: () => 'image/jpeg', getBytes: () => (url.includes('/new') ? [1, 2, 3] : [9, 9, 9]) }) }; } // each file's thumbnail looks different
       if (url.includes('tokeninfo')) { const g = Array.isArray(counts.google) ? counts.google.shift() : counts.google; counts.googleCalls = (counts.googleCalls || 0) + 1;
         return { getResponseCode: () => g.status, getContentText: () => JSON.stringify(g.body) }; }
       const q = decodeURIComponent(url.split('&q=')[1]); fetched.push(q);
@@ -251,6 +253,29 @@ for (const [why, google] of [
   assert.deepStrictEqual(imageSongs, [vm.runInContext('IMAGE_SONG', ctx)], 'the image-upload song differs between app.js and Code.gs IMAGE_SONG');
   page.forEach((_, i) => assert.ok(fs.existsSync(`${__dirname}/assets/thumbs/${String(i + 1).padStart(2, '0')}.jpg`), `missing thumbnail for song ${i + 1}`));
   assert.ok(!fs.existsSync(`${__dirname}/assets/thumbs/${String(page.length + 1).padStart(2, '0')}.jpg`), 'more thumbnails than songs');
+}
+
+// Preview still of the person's own upload: newest file's Drive thumbnail, as a data URL; cached; cleared by a new upload.
+{
+  const song = '02 - Besok Mungkin Kita Sampai';
+  const files = [];
+  const { ctx, cache, counts } = load([], files);
+  const sf = ctx.DriveApp.getFolderById('U').createFolder(song);
+  files.push({ name: 'old.mp4', parents: [sf.getId()], createdTime: '2026-11-25T01:00:00.000Z', thumbnailLink: 'https://thumbs.example/old=s220' },
+             { name: 'new.mp4', parents: [sf.getId()], createdTime: '2026-11-25T09:00:00.000Z', thumbnailLink: 'https://thumbs.example/new=s220' });
+  const s = '0f8b5c1e-4a2d-4c3b-9e7f-112233445566'; cache.set('sess:' + s, 'budi@x.com');
+  const r = post(ctx, { action: 'preview', session: s, song: 1 });
+  assert.strictEqual(r.image, 'data:image/jpeg;base64,AQID');
+  assert.strictEqual(counts.thumbFetches, 1);
+  post(ctx, { action: 'preview', session: s, song: 1 });
+  assert.strictEqual(counts.thumbFetches, 1, 'second view served from cache');
+  post(ctx, { action: 'startUpload', session: s, song: 1, fileName: 'x.mp4', mimeType: 'video/mp4', size: 10 });
+  assert.ok(!cache.has('thumb:budi@x.com:1'), 'new upload clears the old preview');
+  assert.deepStrictEqual(post(ctx, { action: 'preview', session: s, song: 3 }), { image: null }, 'no folder for that song yet');
+  files.forEach((f) => delete f.thumbnailLink); cache.delete('thumb:budi@x.com:1');
+  assert.deepStrictEqual(post(ctx, { action: 'preview', session: s, song: 1 }), { image: null }, 'Drive has no thumbnail yet');
+  assert.match(post(ctx, { action: 'preview', song: 1 }).error, /Sesi berakhir/, 'only for the signed-in owner');
+  assert.match(post(ctx, { action: 'preview', session: s, song: 99 }).error, /Lagu tidak valid/);
 }
 
 console.log('Code.gs: all tests passed');
