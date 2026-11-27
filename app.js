@@ -1,7 +1,7 @@
 // Apps Script Web App URL (see Code.gs).
 const API_URL = 'https://script.google.com/macros/s/AKfycbyyVZvBLuOZz7qteS06Y6gLOIhEKL1D6PBXNP2fImdsNbf9QgwSQ7Pom1nEp65fT3z-Ow/exec';
 // OAuth "Web application" client ID from Google Cloud Console; same value as GOOGLE_CLIENT_ID in Code.gs.
-const GOOGLE_CLIENT_ID = 'PASTE_CLIENT_ID.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = '593857897186-p3hjif0elcd9ouk2u5j62kmf4rnl2m3p.apps.googleusercontent.com';
 
 const SONGS = [
   ['Evakuasi', 'Footage aktivitasmu memulai hari'],

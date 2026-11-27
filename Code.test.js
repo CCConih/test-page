@@ -131,7 +131,7 @@ const SIGNUP = { agreed: true, consentVersion: '2026-11-25' };
 }
 
 // ---------- Google sign-in and sessions ----------
-const ID = 'PASTE_CLIENT_ID.apps.googleusercontent.com'; // GOOGLE_CLIENT_ID as set in Code.gs
+const ID = fs.readFileSync(__dirname + '/Code.gs', 'utf8').match(/GOOGLE_CLIENT_ID = '([^']+)'/)[1]; // whatever Code.gs is set to
 const GOOD = (email, extra = {}) => ({ status: 200, body: { aud: ID, iss: 'https://accounts.google.com', email, email_verified: 'true', name: 'Budi Santoso', ...extra } });
 const post = (ctx, body) => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(body) } }));
 

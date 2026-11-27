@@ -14,7 +14,7 @@ const SONGS = ['Evakuasi', 'Besok Mungkin Kita Sampai', 'Jam Makan Siang', 'Dehi
 const IMAGE_SONG = 3; // Dehidrasi takes a screenshot; every other song is video only
 const MAX_BYTES =500 * 1024 * 1024;
 // OAuth "Web application" client ID from Google Cloud Console; must be the same value as GOOGLE_CLIENT_ID in app.js.
-const GOOGLE_CLIENT_ID = 'PASTE_CLIENT_ID.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = '593857897186-p3hjif0elcd9ouk2u5j62kmf4rnl2m3p.apps.googleusercontent.com';
 const SESSION_SECONDS = 21600; // 6 h, the script cache maximum; after that people tap "Masuk dengan Google" again
 
 function doPost(e) {
