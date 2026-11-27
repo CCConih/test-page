@@ -15,13 +15,16 @@ const IMAGE_SONG = 3; // Dehidrasi takes a screenshot; every other song is video
 const MAX_BYTES =500 * 1024 * 1024;
 // OAuth "Web application" client ID from Google Cloud Console; must be the same value as GOOGLE_CLIENT_ID in app.js.
 const GOOGLE_CLIENT_ID = '593857897186-p3hjif0elcd9ouk2u5j62kmf4rnl2m3p.apps.googleusercontent.com';
+// Change on every edit. After redeploying, the "version" action must answer this, or the old code is still live.
+const BACKEND_VERSION = '2026-11-27 thumbnails';
 const SESSION_SECONDS = 21600; // 6 h, the script cache maximum; after that people tap "Masuk dengan Google" again
 
 function doPost(e) {
   let out;
   try {
     const d = JSON.parse(e.postData.contents);
-    if (d.action === 'auth') out = auth(String(d.idToken || ''));
+    if (d.action === 'version') out = { version: BACKEND_VERSION }; // public: lets anyone confirm which Code.gs is live after a redeploy
+    else if (d.action === 'auth') out = auth(String(d.idToken || ''));
     else {
       // Every other action acts only for the Google account that signed in: the email comes from the session,
       // never from the request, so nobody can read or upload as someone else by typing their email.
